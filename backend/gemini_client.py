@@ -3,7 +3,11 @@ from dotenv import load_dotenv
 import os
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
-client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+
+_api_key = os.environ.get("GEMINI_API_KEY")
+if not _api_key:
+    raise SystemExit("ERROR: GEMINI_API_KEY environment variable is not set")
+client = genai.Client(api_key=_api_key)
 
 
 def get_explanation(alert_level: str, risk_score: float) -> str:

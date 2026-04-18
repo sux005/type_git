@@ -1,2 +1,6 @@
 # AWS / Security Keys
 *.pem
+
+# Environment variables
+.env
+backend/.env

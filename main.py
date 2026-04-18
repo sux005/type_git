@@ -13,7 +13,7 @@ if not os.path.exists("csv"):
 app.mount("/csv", StaticFiles(directory="csv"), name="csv")
 
 # 3. Mount the Root folder so the browser can find jsFuns.js, etc.
-app.mount("/static", StaticFiles(directory="."), name="static")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/", response_class=HTMLResponse)
 async def get_dashboard():

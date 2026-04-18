@@ -12,7 +12,7 @@ Environmental risk score (0.0–1.0): {risk_score:.2f}
 Generate a concise 1–2 sentence explanation of current coastal conditions and flood risk for emergency responders.
 Be specific about what the data means. Do not use filler phrases."""
     response = client.models.generate_content(
-        model="gemini-1.5-flash",
+        model="gemini-2.0-flash-lite",
         contents=prompt,
     )
     return response.text.strip()

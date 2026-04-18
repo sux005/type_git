@@ -47,13 +47,7 @@ function mouseEv(e) {
 	}
 }
 
-$('#container_timeline').bind('mousemove touchmove touchstart', mouseEv);
 $('#container_temp').bind('mousemove touchmove touchstart', mouseEv);
-$('#container_sal').bind('mousemove touchmove touchstart', mouseEv);
-$('#container_pH').bind('mousemove touchmove touchstart', mouseEv);
-$('#container_o2').bind('mousemove touchmove touchstart', mouseEv);
-$('#container_no3').bind('mousemove touchmove touchstart', mouseEv);
-$('#container_fluor').bind('mousemove touchmove touchstart', mouseEv);
 
 //Override the reset function, we don't need to hide the tooltips and crosshairs.
 Highcharts.Pointer.prototype.reset = function() {

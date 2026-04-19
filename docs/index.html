@@ -218,6 +218,8 @@
 
 <script>
 const EC2 = "https://3-15-176-0.sslip.io";
+const GEMINI_KEY = "AIzaSyAyz7EX_5Y_QWM6yTROZPbi0YM8XwB0Ioc";
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`;
 const MAX_POINTS = 30;
 
 function makeChart(id, label, color) {
@@ -312,6 +314,16 @@ setInterval(poll, 1000);
 
 const ENV_RISK_COLORS = { normal: "#22c55e", elevated: "#f59e0b", high: "#ef4444" };
 
+async function callGemini(prompt) {
+  const res = await fetch(GEMINI_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+  });
+  const data = await res.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
+}
+
 async function pollSummary() {
   try {
     const res = await fetch(`${EC2}/summary`);
@@ -324,9 +336,23 @@ async function pollSummary() {
     envEl.style.color = ENV_RISK_COLORS[envRisk] || "#22c55e";
 
     // Conclusions
-    document.getElementById("arduino-conclusion").textContent = data.arduino_conclusion || "—";
-    document.getElementById("csv-conclusion").textContent = data.csv_conclusion || "—";
-    document.getElementById("gemini-summary").textContent = data.ai_summary || "—";
+    const arduinoText = data.arduino_conclusion || "—";
+    const csvText = data.csv_conclusion || "—";
+    document.getElementById("arduino-conclusion").textContent = arduinoText;
+    document.getElementById("csv-conclusion").textContent = csvText;
+
+    // Call Gemini from the browser
+    document.getElementById("gemini-summary").textContent = "Generating AI summary...";
+    const prompt = `You are a coastal flood monitoring AI for emergency responders.
+
+Arduino edge sensor (on-device KNN): ${arduinoText}
+Scripps ocean dataset: ${csvText}
+Combined alert: ${data.combined_risk || "unknown"}
+
+Write exactly 2 sentences summarizing current coastal flood risk. Reference specific sensor values. State what the Arduino detected AND what the ocean dataset indicates. No filler phrases.`;
+
+    const summary = await callGemini(prompt);
+    document.getElementById("gemini-summary").textContent = summary || "AI summary unavailable.";
   } catch (e) {
     document.getElementById("gemini-summary").textContent = "AI summary unavailable — retrying...";
   }

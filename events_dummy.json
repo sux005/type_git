@@ -2,12 +2,12 @@
     {
       "device_id": "Device 1",
       "timestamp": "2026-01-01T10:00:00",
-      "temp": 14,
-      "depth": "Shallow" 
+      "temp": 12,
+      "depth": "Normal" 
     },
   {
     "device_id": "Device 2",
     "timestamp": "2026-01-01T10:00:00",
-    "water velocity": "Normal"
+    "water velocity": "Shallow"
   }
   ]

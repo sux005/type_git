@@ -12,14 +12,13 @@ client = genai.Client(api_key=_api_key)
 
 def _fallback_explanation(alert_level: str, risk_score: float) -> str:
     if alert_level == "critical" or risk_score >= 0.7:
-        return (f"Water levels and environmental sensors indicate a critical flood risk "
-                f"(score: {risk_score:.2f}). Immediate action recommended — coastal areas "
-                f"may experience flooding within hours.")
+        return ("Water levels and environmental sensors indicate a critical flood risk. "
+                "Immediate action recommended — coastal areas may experience flooding within hours.")
     elif alert_level == "warning" or risk_score >= 0.4:
-        return (f"Sensor readings show elevated coastal risk (score: {risk_score:.2f}). "
-                f"Conditions are worsening — monitor closely and prepare for possible flooding.")
-    return (f"Coastal conditions are currently stable (score: {risk_score:.2f}). "
-            f"No immediate flood risk detected based on current sensor data.")
+        return ("Sensor readings show elevated coastal risk. "
+                "Conditions are worsening — monitor closely and prepare for possible flooding.")
+    return ("Coastal conditions are currently stable. "
+            "No immediate flood risk detected based on current sensor data.")
 
 
 def get_explanation(alert_level: str, risk_score: float) -> str:
@@ -65,7 +64,7 @@ Live sensor readings:
 - High-risk events in dataset: {high_risk_count}
 
 Write a concise 2-sentence overview of current flood conditions based exactly on these sensor values.
-Reference the actual numbers. Do not use filler phrases."""
+Reference the actual sensor readings (temperature, depth, velocity). Do not include any numeric scores or score values. Do not use filler phrases."""
     try:
         response = client.models.generate_content(
             model="gemini-2.0-flash",

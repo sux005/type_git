@@ -76,7 +76,9 @@ def _(avg_temp, color_risk, df, events, high_risk, map_risk, mo, theme_toggle):
     if _backend not in sys.path:
         sys.path.insert(0, _backend)
     try:
-        from gemini_client import get_sensor_overview as _get_sensor_overview
+        import importlib, gemini_client as _gc
+        importlib.reload(_gc)
+        _get_sensor_overview = _gc.get_sensor_overview
     except Exception:
         _get_sensor_overview = None
 
@@ -175,6 +177,9 @@ def _(avg_temp, color_risk, df, events, high_risk, map_risk, mo, theme_toggle):
     col_d2       = color_risk(risk_d2)
     col_combined = color_risk(combined_risk)
 
+    def risk_emoji(level):
+        return {0: "☀️", 1: "🌦️", 2: "⚡"}.get(level, "☀️")
+
     buzzer_triggered = combined_risk >= 1
 
     # --- Charts ---
@@ -231,7 +236,7 @@ def _(avg_temp, color_risk, df, events, high_risk, map_risk, mo, theme_toggle):
             <div style="display:inline-block;background:{col_d1}22;border:1.5px solid {col_d1};
                         border-radius:6px;padding:6px 16px;margin-bottom:8px;">
                 <span style="color:{col_d1};font-weight:700;font-size:15px;letter-spacing:1px;">
-                    ⚡ PREDICTED: {map_risk(risk_d1).upper()}
+                    {risk_emoji(risk_d1)} PREDICTED: {map_risk(risk_d1).upper()}
                 </span>
             </div>
             <div style="color:{text_muted};font-size:13px;">🕐 {d1_timestamp}</div>
@@ -254,7 +259,7 @@ def _(avg_temp, color_risk, df, events, high_risk, map_risk, mo, theme_toggle):
             <div style="display:inline-block;background:{col_d2}22;border:1.5px solid {col_d2};
                         border-radius:6px;padding:6px 16px;margin-bottom:8px;">
                 <span style="color:{col_d2};font-weight:700;font-size:15px;letter-spacing:1px;">
-                    ⚡ PREDICTED: {map_risk(risk_d2).upper()}
+                    {risk_emoji(risk_d2)} PREDICTED: {map_risk(risk_d2).upper()}
                 </span>
             </div>
             <div style="color:{text_muted};font-size:13px;">🕐 {d2_timestamp}</div>

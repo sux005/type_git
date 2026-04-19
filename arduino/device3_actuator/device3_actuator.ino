@@ -18,7 +18,7 @@ bool autoDemo = false;
 unsigned long autoDemoTimer = 0;
 unsigned long buttonHoldStart = 0;
 bool holdTracking = false;
- 
+
 void setup() {
   Serial.begin(9600);
   pinMode(RED,    OUTPUT);
@@ -181,4 +181,9 @@ void allOff() {
   digitalWrite(GREEN,  LOW);
   digitalWrite(BLUE,   LOW);
   digitalWrite(BUZZER, LOW);
+}
+
+void applyNormal() {
+  digitalWrite(RED, LOW); digitalWrite(GREEN, HIGH);
+  digitalWrite(BLUE, LOW); digitalWrite(BUZZER, LOW);
 }

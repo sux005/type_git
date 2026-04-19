@@ -8,24 +8,49 @@ app = marimo.App(width="full")
 def _():
     import marimo as mo
     import pandas as pd
-    import json
-
-    return json, mo, pd
+    import requests
+    return mo, pd, requests
 
 
 @app.cell
 def _(pd):
-    df = pd.read_csv("final_output.csv")
-    df["DATE Time"] = pd.to_datetime(df["DATE Time"])
+    df = pd.read_csv("data/final_output.csv")
+    df["DateTime"] = pd.to_datetime(df["DateTime"])
     return (df,)
 
 
 @app.cell
-def _(json):
+def _(requests):
+    def _alert_to_risk(alert_level: str) -> int:
+        level = str(alert_level).upper()
+        if level == "CRITICAL":
+            return 2
+        elif level == "WARNING":
+            return 1
+        return 0
+
+    def _translate(raw: dict):
+        device_id = raw.get("device_id")
+        alert = raw.get("alert_level", "NORMAL")
+        risk = _alert_to_risk(alert)
+        features = raw.get("features") or {}
+        current_water = features.get("current_water", 0)
+        timestamp = raw.get("server_received_at", "—")
+        if device_id == 1:
+            depth_map = {0: "Shallow", 1: "Normal", 2: "Deep"}
+            return {"device_id": "Device 1", "temp": round(current_water / 1023 * 30, 1),
+                    "depth": depth_map.get(risk, "Shallow"), "timestamp": timestamp}
+        elif device_id == 2:
+            velocity_map = {0: "low", 1: "normal", 2: "high"}
+            return {"device_id": "Device 2", "water velocity": velocity_map.get(risk, "normal"),
+                    "timestamp": timestamp}
+        return None
+
     try:
-        with open("events_dummy.json", "r") as f:
-            events = json.load(f)
-    except:
+        resp = requests.get("http://3.15.176.0:8000/events", timeout=5)
+        resp.raise_for_status()
+        events = [e for raw in resp.json().get("events", []) if (e := _translate(raw)) is not None]
+    except Exception:
         events = []
     return (events,)
 
@@ -55,7 +80,7 @@ def _():
 def _(df):
     latest = df.iloc[-1]
     avg_temp = df["TEMP"].mean()
-    high_risk = df[df["RISK_SCORE"] >= 2].shape[0]
+    high_risk = df[df["risk_score"] >= 2].shape[0]
     return avg_temp, high_risk
 
 
@@ -96,29 +121,27 @@ def _(avg_temp, color_risk, df, events, high_risk, map_risk, mo, theme_toggle):
     # --- Lookup: Device 1 — temp + depth ---
     def predict_device1(temp, depth_str):
         depth_m = depth_map.get(str(depth_str).lower(), 20.0)
-        df_clean = df[["TEMP", "DEPTH", "RISK_SCORE"]].dropna()
+        df_clean = df[["TEMP", "DEPTH", "risk_score"]].dropna()
         dist = ((df_clean["TEMP"] - temp) ** 2 + (df_clean["DEPTH"] - depth_m) ** 2) ** 0.5
         closest = df_clean.iloc[dist.idxmin()]
-        return int(closest["RISK_SCORE"])
+        return 2 if closest["risk_score"] >= 0.7 else (1 if closest["risk_score"] >= 0.4 else 0)
 
-    # --- Lookup: Device 2 — water velocity ---
+    # --- Lookup: Device 2 — temp proxy ---
     def predict_device2(water_velocity):
-        df_clean = df[["WATER VELOCITY", "RISK_SCORE"]].dropna()
-        dist = (df_clean["WATER VELOCITY"] - water_velocity).abs()
+        velocity_to_temp = {"low": -0.15, "normal": 0.03, "high": 0.25}
+        temp_proxy = 14.0 + velocity_to_temp.get(water_velocity, 0.03) * 50
+        df_clean = df[["TEMP", "risk_score"]].dropna()
+        dist = (df_clean["TEMP"] - temp_proxy).abs()
         closest = df_clean.iloc[dist.idxmin()]
-        return int(closest["RISK_SCORE"])
+        return 2 if closest["risk_score"] >= 0.7 else (1 if closest["risk_score"] >= 0.4 else 0)
 
-    # --- Combined lookup: temp + depth + water velocity ---
+    # --- Combined lookup: temp + depth ---
     def predict_combined(temp, depth_str, water_velocity):
         depth_m = depth_map.get(str(depth_str).lower(), 20.0)
-        df_clean = df[["TEMP", "DEPTH", "WATER VELOCITY", "RISK_SCORE"]].dropna()
-        dist = (
-            (df_clean["TEMP"] - temp) ** 2 +
-            (df_clean["DEPTH"] - depth_m) ** 2 +
-            (df_clean["WATER VELOCITY"] - water_velocity) ** 2
-        ) ** 0.5
+        df_clean = df[["TEMP", "DEPTH", "risk_score"]].dropna()
+        dist = ((df_clean["TEMP"] - temp) ** 2 + (df_clean["DEPTH"] - depth_m) ** 2) ** 0.5
         closest = df_clean.iloc[dist.idxmin()]
-        return int(closest["RISK_SCORE"])
+        return 2 if closest["risk_score"] >= 0.7 else (1 if closest["risk_score"] >= 0.4 else 0)
 
     # --- Pull device data from events ---
     dev1 = next((e for e in events if e["device_id"] == "Device 1"), None)
@@ -152,7 +175,7 @@ def _(avg_temp, color_risk, df, events, high_risk, map_risk, mo, theme_toggle):
     plt.style.use("dark_background" if is_dark else "default")
 
     fig1, ax1 = plt.subplots(figsize=(7, 3))
-    ax1.plot(df["DATE Time"], df["TEMP"], color="#4fc3f7", linewidth=0.8)
+    ax1.plot(df["DateTime"], df["TEMP"], color="#4fc3f7", linewidth=0.8)
     ax1.set_title("Temperature Over Time", color=chart_fg, fontsize=11)
     ax1.tick_params(colors=chart_tick, labelsize=7)
     ax1.xaxis.set_major_formatter(mdates.DateFormatter("%b\n%Y"))
@@ -161,9 +184,9 @@ def _(avg_temp, color_risk, df, events, high_risk, map_risk, mo, theme_toggle):
     fig1.tight_layout()
 
     fig2, ax2 = plt.subplots(figsize=(7, 3))
-    risk_counts = df["RISK_SCORE"].value_counts().sort_index()
-    ax2.bar(risk_counts.index.astype(str), risk_counts.values,
-            color=["#4caf50", "#ff9800", "#f44336"][:len(risk_counts)])
+    risk_bins = pd.cut(df["risk_score"], bins=[0, 0.4, 0.7, 1.0], labels=["Normal", "Warning", "Critical"], include_lowest=True)
+    risk_counts = risk_bins.value_counts().reindex(["Normal", "Warning", "Critical"])
+    ax2.bar(risk_counts.index, risk_counts.values, color=["#4caf50", "#ff9800", "#f44336"])
     ax2.set_title("Risk Distribution", color=chart_fg, fontsize=11)
     ax2.tick_params(colors=chart_tick, labelsize=8)
     ax2.set_facecolor(chart_bg)
@@ -171,11 +194,11 @@ def _(avg_temp, color_risk, df, events, high_risk, map_risk, mo, theme_toggle):
     fig2.tight_layout()
 
     fig3, ax3 = plt.subplots(figsize=(7, 3))
-    df3 = df[["TEMP", "RISK_SCORE"]].dropna()
-    scatter_colors = df3["RISK_SCORE"].map({0: "#4caf50", 1: "#ff9800", 2: "#f44336"}).fillna("#4caf50").tolist()
-    ax3.scatter(df3["TEMP"], df3["RISK_SCORE"], c=scatter_colors, alpha=0.5, s=10)
+    df3 = df[["TEMP", "risk_score"]].dropna()
+    scatter_colors = df3["risk_score"].apply(lambda s: "#f44336" if s >= 0.7 else ("#ff9800" if s >= 0.4 else "#4caf50")).tolist()
+    ax3.scatter(df3["TEMP"], df3["risk_score"], c=scatter_colors, alpha=0.5, s=10)
     ax3.set_xlabel("TEMP", color=chart_tick, fontsize=9)
-    ax3.set_ylabel("RISK_SCORE", color=chart_tick, fontsize=9)
+    ax3.set_ylabel("risk_score", color=chart_tick, fontsize=9)
     ax3.set_title("Temperature vs Risk", color=chart_fg, fontsize=11)
     ax3.tick_params(colors=chart_tick, labelsize=8)
     ax3.set_facecolor(chart_bg)

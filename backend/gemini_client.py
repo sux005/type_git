@@ -46,25 +46,37 @@ def get_sensor_overview(
     d1_temp: float,
     d1_depth: str,
     d1_risk: int,
-    d2_velocity: str,
-    d2_risk: int,
+    arduino_alert: str,
+    d1_humidity: float,
+    d1_vibration: float,
     avg_temp: float,
     high_risk_count: int,
+    env_risk_label: str = "normal",
+    avg_cspd: float = 0.0,
+    max_cspd: float = 0.0,
+    # legacy params kept for compatibility
+    d2_velocity: str = "normal",
+    d2_risk: int = 0,
 ) -> str:
     risk_label = {0: "Normal", 1: "Warning", 2: "Critical"}
     if not _api_key:
         return _fallback_explanation(alert_level, combined_risk / 2.0)
     prompt = f"""You are a coastal flood monitoring AI for emergency responders.
 
-Live sensor readings:
-- Device 1 (Temperature + Depth): {d1_temp:.1f}°C, depth={d1_depth}, predicted risk={risk_label.get(d1_risk, d1_risk)}
-- Device 2 (Water Velocity): velocity={d2_velocity}, predicted risk={risk_label.get(d2_risk, d2_risk)}
-- Combined system risk: {risk_label.get(combined_risk, combined_risk)} (level {combined_risk}/2)
-- Historical average temperature: {avg_temp:.2f}°C
-- High-risk events in dataset: {high_risk_count}
+Arduino edge sensor (on-device KNN classifier):
+- Alert level: {arduino_alert}
+- Water depth: {d1_depth} | Temp: {d1_temp:.1f}°C | Humidity: {d1_humidity:.1f}% | Vibration: {d1_vibration:.3f}g
+- On-device risk: {risk_label.get(d1_risk, d1_risk)}
 
-Write a concise 2-sentence overview of current flood conditions based exactly on these sensor values.
-Reference the actual sensor readings (temperature, depth, velocity). Do not include any numeric scores or score values. Do not use filler phrases."""
+Scripps ocean dataset (environmental context):
+- Average current speed: {avg_cspd:.3f} m/s (peak: {max_cspd:.3f} m/s)
+- Historical avg temp: {avg_temp:.2f}°C | Elevated-risk readings: {high_risk_count}
+- Environmental risk: {env_risk_label}
+
+Combined system alert: {risk_label.get(combined_risk, combined_risk)}
+
+Write exactly 2 sentences summarizing current coastal flood risk for emergency responders.
+Use specific sensor values. State what the Arduino detected AND what the ocean dataset indicates. Do not use filler phrases."""
     try:
         response = client.models.generate_content(
             model="gemini-2.0-flash",

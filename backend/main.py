@@ -21,10 +21,14 @@ app.add_middleware(
 # In-memory event store
 events_store: List[dict] = []
 
-# Load CSV data
+# Load processed CSV (has risk_score column)
 csv_path = os.path.join(os.path.dirname(__file__), "..", "data", "final_output.csv")
 df = pd.read_csv(csv_path)
-df["DATE Time"] = pd.to_datetime(df["DATE Time"])
+df["DateTime"] = pd.to_datetime(df["DateTime"])
+
+# Load raw Scripps CSV for richer environmental signals (CSPD, PRES, currents)
+raw_csv_path = os.path.join(os.path.dirname(__file__), "..", "data", "output.csv")
+df_raw = pd.read_csv(raw_csv_path) if os.path.exists(raw_csv_path) else pd.DataFrame()
 
 
 class Event(BaseModel):
@@ -136,49 +140,92 @@ def latest_event() -> dict:
     }
 
 
+def _compute_env_risk() -> dict:
+    """Derive environmental risk label and stats from the raw Scripps CSV."""
+    if df_raw.empty:
+        return {"label": "normal", "score": 0, "avg_cspd": 0.0, "max_cspd": 0.0, "avg_pres": None}
+
+    avg_cspd = float(df_raw["CSPD"].mean()) if "CSPD" in df_raw.columns else 0.0
+    max_cspd = float(df_raw["CSPD"].max()) if "CSPD" in df_raw.columns else 0.0
+    avg_pres = float(df_raw["PRES"].mean()) if "PRES" in df_raw.columns else None
+
+    # High current speed (CSPD m/s) and pressure spikes indicate storm/flood conditions
+    if max_cspd > 0.5 or avg_cspd > 0.35:
+        label, score = "high", 2
+    elif max_cspd > 0.3 or avg_cspd > 0.2:
+        label, score = "elevated", 1
+    else:
+        label, score = "normal", 0
+
+    return {"label": label, "score": score, "avg_cspd": avg_cspd, "max_cspd": max_cspd, "avg_pres": avg_pres}
+
+
 @app.get("/summary")
 def get_summary() -> dict:
-    """Get AI-generated summary combining Arduino and CSV data."""
-    # CSV conclusions
-    avg_temp = df["TEMP"].mean()
-    high_risk = (df["RISK_SCORE"] >= 2).sum()
-    
-    # Arduino conclusions from latest events
+    """Get AI-generated summary combining Arduino and CSV environmental data."""
+    # --- CSV environmental conclusions ---
+    avg_temp = float(df["TEMP"].mean())
+    high_risk_count = int((df["risk_score"] >= 0.5).sum())
+    env = _compute_env_risk()
+
+    csv_conclusion = (
+        f"Scripps ocean data: avg temp {avg_temp:.2f}°C, "
+        f"avg current speed {env['avg_cspd']:.3f} m/s (peak {env['max_cspd']:.3f} m/s), "
+        f"environmental risk: {env['label']} ({high_risk_count} elevated-risk readings)."
+    )
+
+    # --- Arduino conclusions from latest events ---
     dev1 = next((e for e in events_store[::-1] if e.get("device_id") == "water_node"), None)
-    dev2 = next((e for e in events_store[::-1] if e.get("device_id") == "Device 2"), None)
-    
+
     d1_temp = float(dev1["temp"]) if dev1 and dev1.get("temp") else 14.0
     d1_water_depth = float(dev1["water_depth"]) if dev1 and dev1.get("water_depth") else 0.0
+    d1_humidity = float(dev1["humidity"]) if dev1 and dev1.get("humidity") else 57.0
+    d1_vibration = float(dev1["vibration"]) if dev1 and dev1.get("vibration") else 1.0
+
     if d1_water_depth < 0.3:
         d1_depth_str = "Shallow"
     elif d1_water_depth < 0.6:
         d1_depth_str = "Normal"
     else:
         d1_depth_str = "Deep"
-    
-    d2_velocity_str = str(dev2.get("water velocity", "normal")).lower() if dev2 else "normal"
-    
-    risk_d1 = predict_device1(d1_temp, d1_depth_str)
-    risk_d2 = predict_device2(d2_velocity_str)
-    combined_risk = predict_combined(d1_temp, d1_depth_str, d2_velocity_str)
-    
-    alert_level = map_risk(combined_risk)
-    
-    # Call Gemini
+
+    arduino_alert = dev1["alert_level"] if dev1 else "normal"
+    alert_map = {"normal": 0, "warning": 1, "critical": 2}
+    arduino_risk_int = alert_map.get(arduino_alert, 0)
+
+    arduino_conclusion = (
+        f"Arduino KNN (on-device): alert={arduino_alert}, "
+        f"water_depth={d1_water_depth:.3f}, humidity={d1_humidity:.1f}%, "
+        f"temp={d1_temp:.1f}°C, vibration={d1_vibration:.3f}g."
+    )
+
+    # Combined risk: take the higher of the two signals
+    combined_risk = max(arduino_risk_int, env["score"])
+    combined_label = map_risk(combined_risk)
+
+    # --- Call Gemini ---
     overview = get_sensor_overview(
-        alert_level=alert_level,
+        alert_level=combined_label,
         combined_risk=combined_risk,
         d1_temp=d1_temp,
         d1_depth=d1_depth_str,
-        d1_risk=risk_d1,
-        d2_velocity=d2_velocity_str,
-        d2_risk=risk_d2,
+        d1_risk=arduino_risk_int,
+        arduino_alert=arduino_alert,
+        d1_humidity=d1_humidity,
+        d1_vibration=d1_vibration,
         avg_temp=avg_temp,
-        high_risk_count=high_risk,
+        high_risk_count=high_risk_count,
+        env_risk_label=env["label"],
+        avg_cspd=env["avg_cspd"],
+        max_cspd=env["max_cspd"],
     )
-    
+
     return {
-        "csv_conclusion": f"Historical data shows average temperature of {avg_temp:.2f}°C with {high_risk} high-risk events.",
-        "arduino_conclusion": f"Current sensor readings: Device 1 temp {d1_temp}°C at {d1_depth_str} depth (risk: {map_risk(risk_d1)}), Device 2 velocity {d2_velocity_str} (risk: {map_risk(risk_d2)}), combined risk: {map_risk(combined_risk)}.",
+        "csv_conclusion": csv_conclusion,
+        "arduino_conclusion": arduino_conclusion,
+        "env_risk": env["label"],
+        "env_risk_score": env["score"],
+        "arduino_alert": arduino_alert,
+        "combined_risk": combined_label,
         "ai_summary": overview,
     }

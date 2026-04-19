@@ -21,8 +21,13 @@ events_store: List[dict] = []
 
 class Event(BaseModel):
     device_id: str
-    value: float
-    alert_level: str  # "normal", "warning", or "critical"
+    alert_level: str
+    value: Optional[float] = None
+    water_depth: Optional[float] = None
+    humidity: Optional[float] = None
+    temp: Optional[float] = None
+    distance: Optional[float] = None
+    vibration: Optional[float] = None
     timestamp: Optional[str] = None
     device_name: Optional[str] = None
     host_timestamp: Optional[str] = None
@@ -47,8 +52,13 @@ def create_event(event: Event) -> dict:
     record = {
         "device_id": event.device_id,
         "device_name": event.device_name,
-        "value": event.value,
         "alert_level": event.alert_level,
+        "value": event.value,
+        "water_depth": event.water_depth,
+        "humidity": event.humidity,
+        "temp": event.temp,
+        "distance": event.distance,
+        "vibration": event.vibration,
         "timestamp": event.timestamp,
         "host_timestamp": event.host_timestamp,
         "server_received_at": datetime.now(timezone.utc).isoformat(),

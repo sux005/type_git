@@ -325,7 +325,7 @@ def _compute_env_risk() -> dict:
     }
 
 
-def _adjust_arduino_alert(alert: str, water_depth: float, humidity: float, vibration: float) -> str:
+def _adjust_arduino_alert(alert: str, water_depth: float, humidity: float, vibration: float, distance: float) -> str:
     """
     The Arduino KNN uses vibration ~1.0g as baseline (gravity at rest).
     Training data has critical samples at water_depth≥0.6 with vibration=1.0,
@@ -337,7 +337,8 @@ def _adjust_arduino_alert(alert: str, water_depth: float, humidity: float, vibra
     active_vibration = vibration > 1.15   # actual movement above gravity baseline
     high_water = water_depth > 0.65       # clearly above critical threshold
     high_humidity = humidity > 82         # storm-level humidity
-    confirmed = sum([active_vibration, high_water, high_humidity])
+    close_distance = 0 < distance < 45   # water within 45cm of sensor (normal ~70cm)
+    confirmed = sum([active_vibration, high_water, high_humidity, close_distance])
     if confirmed < 2:
         return "warning"
     return "critical"
@@ -363,9 +364,10 @@ def get_summary(force: bool = Query(False)) -> dict:
     d1_water_depth = float(dev1["water_depth"]) if dev1 and dev1.get("water_depth") else 0.0
     d1_humidity = float(dev1["humidity"]) if dev1 and dev1.get("humidity") else 57.0
     d1_vibration = float(dev1["vibration"]) if dev1 and dev1.get("vibration") else 1.0
+    d1_distance = float(dev1["distance"]) if dev1 and dev1.get("distance") is not None and dev1["distance"] >= 0 else 70.0
 
     raw_alert = dev1["alert_level"] if dev1 else "normal"
-    arduino_alert = _adjust_arduino_alert(raw_alert, d1_water_depth, d1_humidity, d1_vibration)
+    arduino_alert = _adjust_arduino_alert(raw_alert, d1_water_depth, d1_humidity, d1_vibration, d1_distance)
     alert_map = {"normal": 0, "warning": 1, "critical": 2}
     arduino_risk_int = alert_map.get(arduino_alert, 0)
 

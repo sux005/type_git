@@ -399,6 +399,14 @@ def get_summary(force: bool = Query(False)) -> dict:
     return {
         "csv_conclusion": csv_conclusion,
         "arduino_conclusion": arduino_conclusion,
+        "arduino_data": {
+            "alert": arduino_alert,
+            "water_depth": round(d1_water_depth, 3),
+            "humidity": round(d1_humidity, 1),
+            "temp": round(d1_temp, 1),
+            "vibration": round(d1_vibration, 3),
+            "distance": round(d1_distance, 0),
+        },
         "env_risk": env["label"],
         "env_risk_score": env["score"],
         "arduino_alert": arduino_alert,

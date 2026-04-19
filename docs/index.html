@@ -313,7 +313,7 @@ function makeChart(id, label, color) {
       }]
     },
     options: {
-      animation: false,
+      animation: { duration: 400, easing: "easeInOutQuart" },
       plugins: { legend: { display: false } },
       scales: {
         x: { ticks: { color: "#6b7fa3", maxTicksLimit: 6 }, grid: { color: "#1f2d4a" } },
@@ -346,6 +346,8 @@ function setAlert(level) {
   badge.className = "alert-badge badge-" + level;
 }
 
+let _lastEventTime = null;
+
 async function poll() {
   try {
     const res = await fetch(`${EC2}/events?limit=30`);
@@ -353,21 +355,31 @@ async function poll() {
     const events = data.events;
     if (!events || events.length === 0) return;
 
-    // Rebuild charts from recent history
-    charts.water.data.labels = [];     charts.water.data.datasets[0].data = [];
-    charts.humidity.data.labels = [];  charts.humidity.data.datasets[0].data = [];
-    charts.temp.data.labels = [];      charts.temp.data.datasets[0].data = [];
-    charts.vibration.data.labels = []; charts.vibration.data.datasets[0].data = [];
-
-    events.forEach(e => {
-      const t = new Date(e.server_received_at).toLocaleTimeString();
-      if (e.water_depth  != null) { charts.water.data.labels.push(t);     charts.water.data.datasets[0].data.push(e.water_depth); }
-      if (e.humidity     != null) { charts.humidity.data.labels.push(t);  charts.humidity.data.datasets[0].data.push(e.humidity); }
-      if (e.temp         != null) { charts.temp.data.labels.push(t);      charts.temp.data.datasets[0].data.push(e.temp); }
-      if (e.vibration    != null) { charts.vibration.data.labels.push(t); charts.vibration.data.datasets[0].data.push(e.vibration); }
-    });
-
-    Object.values(charts).forEach(c => c.update());
+    // On first load, seed charts with full history
+    if (_lastEventTime === null) {
+      charts.water.data.labels = [];     charts.water.data.datasets[0].data = [];
+      charts.humidity.data.labels = [];  charts.humidity.data.datasets[0].data = [];
+      charts.temp.data.labels = [];      charts.temp.data.datasets[0].data = [];
+      charts.vibration.data.labels = []; charts.vibration.data.datasets[0].data = [];
+      events.forEach(e => {
+        const t = new Date(e.server_received_at).toLocaleTimeString();
+        if (e.water_depth != null) { charts.water.data.labels.push(t);     charts.water.data.datasets[0].data.push(e.water_depth); }
+        if (e.humidity    != null) { charts.humidity.data.labels.push(t);  charts.humidity.data.datasets[0].data.push(e.humidity); }
+        if (e.temp        != null) { charts.temp.data.labels.push(t);      charts.temp.data.datasets[0].data.push(e.temp); }
+        if (e.vibration   != null) { charts.vibration.data.labels.push(t); charts.vibration.data.datasets[0].data.push(e.vibration); }
+      });
+      Object.values(charts).forEach(c => c.update("none"));
+    } else {
+      // Only append new events since last poll
+      const newEvents = events.filter(e => e.server_received_at > _lastEventTime);
+      newEvents.forEach(e => {
+        const t = new Date(e.server_received_at).toLocaleTimeString();
+        if (e.water_depth != null) { push(charts.water,     t, e.water_depth); }
+        if (e.humidity    != null) { push(charts.humidity,  t, e.humidity); }
+        if (e.temp        != null) { push(charts.temp,      t, e.temp); }
+        if (e.vibration   != null) { push(charts.vibration, t, e.vibration); }
+      });
+    }
 
     const latest = events[events.length - 1];
     document.getElementById("val-water").textContent     = latest.water_depth?.toFixed(3) ?? "—";
@@ -376,6 +388,7 @@ async function poll() {
     document.getElementById("val-vibration").textContent = latest.vibration?.toFixed(3)   ?? "—";
     document.getElementById("val-distance").textContent  = latest.distance != null && latest.distance >= 0 ? latest.distance.toFixed(0) : "—";
     document.getElementById("last-updated").textContent  = "Live · " + new Date(latest.server_received_at).toLocaleTimeString();
+    _lastEventTime = latest.server_received_at;
 
     setAlert(latest.alert_level || "Normal");
   } catch (e) {

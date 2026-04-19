@@ -75,14 +75,14 @@
       border-radius: 12px;
       padding: 20px;
     }
-    .chart-box h3 { font-size: 0.85rem; color: #6b7fa3; margin-bottom: 14px; text-transform: uppercase; letter-spacing: 0.06em; }
+    .chart-box h3 { font-size: 1rem; color: #6b7fa3; margin-bottom: 14px; text-transform: uppercase; letter-spacing: 0.06em; }
 
     .summary-section {
       margin-bottom: 28px;
     }
 
     .summary-section h2 {
-      font-size: 0.85rem;
+      font-size: 1rem;
       color: #6b7fa3;
       text-transform: uppercase;
       letter-spacing: 0.06em;
@@ -100,13 +100,11 @@
     }
 
     .ai-box .conclusions {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
       margin-bottom: 16px;
     }
-
-    @media (max-width: 640px) { .ai-box .conclusions { grid-template-columns: 1fr; } }
 
     .conclusion-item {
       background: #0d1424;
@@ -189,12 +187,12 @@
   <div class="ai-box">
     <div class="conclusions">
       <div class="conclusion-item">
-        <strong>Arduino (Edge KNN)</strong>
-        <span id="arduino-conclusion">Loading...</span>
-      </div>
-      <div class="conclusion-item">
         <strong>Scripps Ocean Data</strong>
         <span id="csv-conclusion">Loading...</span>
+      </div>
+      <div class="conclusion-item">
+        <strong>Arduino (Edge KNN)</strong>
+        <span id="arduino-conclusion">Loading...</span>
       </div>
     </div>
     <div class="gemini-text" id="gemini-summary">Waiting for AI summary...</div>

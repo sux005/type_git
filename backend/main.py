@@ -6,7 +6,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pandas as pd
 import os
-from .gemini_client import get_sensor_overview
+try:
+    from .gemini_client import get_sensor_overview
+except ImportError:
+    from gemini_client import get_sensor_overview  # standalone (EC2) execution
 
 app = FastAPI(title="Coastal Flood Monitoring API")
 

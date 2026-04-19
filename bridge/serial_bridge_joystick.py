@@ -6,7 +6,7 @@ import requests
 import serial
 
 # Update SERIAL_PORT when running — find with: ls /dev/tty.usb* or ls /dev/tty.usbmodem*
-SERIAL_PORT = "/dev/tty.usbmodem14101"
+SERIAL_PORT = "/dev/tty.usbmodem26911793012"
 BAUD_RATE = 9600
 API_URL = "http://3.15.176.0:8000/event"
 DEVICE_NAME = "env_node_sam"
@@ -20,6 +20,7 @@ ALERT_MAP = {
 }
 
 _prev_water: int = 0
+_last_alert: str = ""
 
 
 def build_payload(event: dict) -> dict:
@@ -48,7 +49,20 @@ def build_payload(event: dict) -> dict:
 
 
 def is_valid_event(event: dict) -> bool:
-    return isinstance(event, dict) and "alert_level" in event and "value" in event
+    if not (isinstance(event, dict) and "alert_level" in event and "value" in event):
+        return False
+    # ignore noise: value below 0.1 with no button press is analog drift
+    value = float(event.get("value", 0.0))
+    alert = str(event.get("alert_level", "")).lower()
+    if value < 0.1 and alert == "normal":
+        return False
+    # only post when alert level changes
+    global _last_alert
+    mapped = ALERT_MAP.get(alert, "NORMAL")
+    if mapped == _last_alert:
+        return False
+    _last_alert = mapped
+    return True
 
 
 def post_event(payload: dict) -> None:

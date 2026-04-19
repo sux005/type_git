@@ -5,6 +5,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from gemini_client import get_explanation
+
 app = FastAPI(title="Coastal Flood Monitoring API")
 
 # Enable CORS for all origins
@@ -76,6 +78,12 @@ def list_events(limit: int = 50) -> dict:
         "returned": min(safe_limit, len(events_store)),
         "events": events_store[-safe_limit:],
     }
+
+
+@app.get("/explanation")
+def explanation(alert_level: str = "normal", risk_score: float = 0.0) -> dict:
+    text = get_explanation(alert_level.lower(), risk_score)
+    return {"explanation": text, "alert_level": alert_level, "risk_score": risk_score}
 
 
 @app.get("/events/latest")

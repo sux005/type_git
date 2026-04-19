@@ -258,7 +258,7 @@ def _(avg_temp, color_risk, df, events, high_risk, latest, map_risk, mo, theme_t
     """)
 
     left_col = mo.vstack([
-        mo.Html(f"<h1 style='font-size:26px;font-weight:700;color:{text_main};margin-bottom:16px;'>📡 Real-Time System</h1>"),
+        mo.Html(f"<h1 style='font-size:26px;font-weight:700;color:{text_main};margin-bottom:16px;'>📡 Real-Time Updates</h1>"),
         card_d1,
         card_d2,
         card_d3,
@@ -290,7 +290,7 @@ def _(avg_temp, color_risk, df, events, high_risk, latest, map_risk, mo, theme_t
     """)
 
     right_col = mo.vstack([
-        mo.Html(f"<h1 style='font-size:26px;font-weight:700;color:{text_main};margin-bottom:16px;'>📊 Data Intelligence Layer</h1>"),
+        mo.Html(f"<h1 style='font-size:26px;font-weight:700;color:{text_main};margin-bottom:16px;'>📊 Prediction and Data Layer</h1>"),
         mo.Html(f"<h2 style='font-size:20px;color:{text_main};margin:8px 0 10px;'>Current System State</h2>"),
         metrics_html,
         mo.Html(f"<h2 style='font-size:20px;color:{text_main};margin:24px 0 10px;'>Temperature Over Time</h2>"),
@@ -320,7 +320,7 @@ def _(avg_temp, color_risk, df, events, high_risk, latest, map_risk, mo, theme_t
             </style>
             <div style="background:{bg};margin:-16px -24px 0 -24px;padding:24px 24px 0 24px;">
                 <h1 style="font-size:36px;font-weight:800;color:{text_main};margin:0 0 16px 0;">
-                    🌊 Explainable Ocean Monitoring System
+                    🌊 Flood Monitoring System
                 </h1>
             </div>
         """),

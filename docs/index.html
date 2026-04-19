@@ -218,7 +218,7 @@
 
 <script>
 const EC2 = "https://3-15-176-0.sslip.io";
-const GEMINI_KEY = "AIzaSyAyz7EX_5Y_QWM6yTROZPbi0YM8XwB0Ioc";
+const GEMINI_KEY = "AIzaSyAoN-9PxDCiLjy7FWlJiCOu2l59ujplwJ8";
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`;
 const MAX_POINTS = 30;
 
@@ -321,6 +321,10 @@ async function callGemini(prompt) {
     body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
   });
   const data = await res.json();
+  if (!res.ok) {
+    const msg = data.error?.message || JSON.stringify(data);
+    return `[Gemini error ${res.status}: ${msg.slice(0, 120)}]`;
+  }
   return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
 }
 

@@ -6,7 +6,7 @@ import requests
 import serial
 
 # Update these when running on UNO Q
-SERIAL_PORT = "/dev/ttyACM0"
+SERIAL_PORT = "/dev/cu.usbmodem15401295172"
 BAUD_RATE = 115200
 API_URL = "http://3.15.176.0:8000/event"
 DEVICE_NAME = "unoq_vivek"
@@ -20,6 +20,17 @@ def enrich_event(event: dict) -> dict:
     event["device_name"] = DEVICE_NAME
     event["host_timestamp"] = datetime.now(timezone.utc).isoformat()
 
+    # Handle simple format: {"device_id":"water_node","value":0.123,"alert_level":"normal"}
+    if "device_id" in event and "value" in event:
+        # Convert device_id to string if needed
+        if isinstance(event["device_id"], str):
+            event["device_id"] = event["device_id"]
+        else:
+            event["device_id"] = str(event["device_id"])
+        # Value is already set
+        return event
+    
+    # Handle complex KNN format
     if "device_id" not in event or event["device_id"] is None:
         event["device_id"] = DEFAULT_DEVICE_ID
     else:
@@ -36,6 +47,15 @@ def is_valid_event(event: dict) -> bool:
     """
     Only forward actual sensor events, not boot/status messages.
     """
+    # Accept both formats: complex KNN and simple water sensor
+    if "status" in event and event["status"] == "booted":
+        return False  # Skip boot messages
+    
+    # Simple format: {"device_id":"water_node","value":0.123,"alert_level":"normal"}
+    if "device_id" in event and "value" in event and "alert_level" in event:
+        return True
+    
+    # Complex KNN format: {"timestamp_ms": 1234567890, "alert_level": "normal", "features": {...}}
     required_keys = {"timestamp_ms", "alert_level", "features"}
     return isinstance(event, dict) and required_keys.issubset(event.keys())
 

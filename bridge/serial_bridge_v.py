@@ -6,7 +6,7 @@ import requests
 import serial
 
 # Update these when running on UNO Q
-SERIAL_PORT = "/dev/ttyACM0"
+SERIAL_PORT = "/dev/tty.usbmodem26911793011"  # update if different: ls /dev/tty.usbmodem*
 BAUD_RATE = 115200
 API_URL = "http://3.15.176.0:8000/event"
 DEVICE_NAME = "unoq_vivek"

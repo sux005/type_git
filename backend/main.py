@@ -144,23 +144,98 @@ def latest_event() -> dict:
 
 
 def _compute_env_risk() -> dict:
-    """Derive environmental risk label and stats from the raw Scripps CSV."""
+    """
+    Derive environmental risk from Scripps mooring data using percentile-based
+    multi-factor scoring rather than simple averages.
+
+    Risk factors:
+      - Current speed (CSPD): % of readings above the 75th percentile threshold
+      - Vertical current (WCUR): elevated upwelling/downwelling = storm indicator
+      - Pressure variance (PRES): high std dev = storm/surge conditions
+      - Temperature anomaly (TEMP): deviation from median signals unusual ocean state
+    """
     if df_raw.empty:
-        return {"label": "normal", "score": 0, "avg_cspd": 0.0, "max_cspd": 0.0, "avg_pres": None}
+        return {"label": "normal", "score": 0, "avg_cspd": 0.0, "max_cspd": 0.0,
+                "high_current_pct": 0.0, "env_detail": "No ocean data available."}
 
-    avg_cspd = float(df_raw["CSPD"].mean()) if "CSPD" in df_raw.columns else 0.0
-    max_cspd = float(df_raw["CSPD"].max()) if "CSPD" in df_raw.columns else 0.0
-    avg_pres = float(df_raw["PRES"].mean()) if "PRES" in df_raw.columns else None
+    risk_points = 0
+    details = []
 
-    # High current speed (CSPD m/s) and pressure spikes indicate storm/flood conditions
-    if max_cspd > 0.5 or avg_cspd > 0.35:
+    # --- Current speed ---
+    if "CSPD" in df_raw.columns:
+        cspd = df_raw["CSPD"].dropna()
+        avg_cspd = float(cspd.mean())
+        max_cspd = float(cspd.max())
+        p75 = float(cspd.quantile(0.75))
+        p95 = float(cspd.quantile(0.95))
+        high_pct = float((cspd > p75).mean() * 100)
+        details.append(f"current {avg_cspd:.3f} m/s avg, peak {max_cspd:.3f} m/s, p95={p95:.3f} m/s")
+        if p95 > 0.45 or high_pct > 30:
+            risk_points += 2
+        elif p95 > 0.28 or high_pct > 20:
+            risk_points += 1
+    else:
+        avg_cspd, max_cspd, high_pct = 0.0, 0.0, 0.0
+
+    # --- Vertical current (upwelling/surge indicator) ---
+    if "WCUR" in df_raw.columns:
+        wcur = df_raw["WCUR"].dropna().abs()
+        high_vert_pct = float((wcur > wcur.quantile(0.90)).mean() * 100)
+        details.append(f"vertical current anomaly {high_vert_pct:.1f}% of time")
+        if high_vert_pct > 15:
+            risk_points += 1
+
+    # --- Pressure variance (storm indicator) ---
+    if "PRES" in df_raw.columns:
+        pres = df_raw["PRES"].dropna()
+        pres_std = float(pres.std())
+        details.append(f"pressure std {pres_std:.3f} dbar")
+        if pres_std > 1.5:
+            risk_points += 2
+        elif pres_std > 0.8:
+            risk_points += 1
+
+    # --- Temperature anomaly ---
+    if "TEMP" in df_raw.columns:
+        temp = df_raw["TEMP"].dropna()
+        temp_range = float(temp.max() - temp.min())
+        details.append(f"temp range {temp_range:.2f}°C")
+        if temp_range > 6:
+            risk_points += 1
+
+    if risk_points >= 4:
         label, score = "high", 2
-    elif max_cspd > 0.3 or avg_cspd > 0.2:
+    elif risk_points >= 2:
         label, score = "elevated", 1
     else:
         label, score = "normal", 0
 
-    return {"label": label, "score": score, "avg_cspd": avg_cspd, "max_cspd": max_cspd, "avg_pres": avg_pres}
+    return {
+        "label": label,
+        "score": score,
+        "avg_cspd": avg_cspd,
+        "max_cspd": max_cspd,
+        "high_current_pct": high_pct,
+        "env_detail": "; ".join(details),
+    }
+
+
+def _adjust_arduino_alert(alert: str, water_depth: float, humidity: float, vibration: float) -> str:
+    """
+    The Arduino KNN uses vibration ~1.0g as baseline (gravity at rest).
+    Training data has critical samples at water_depth≥0.6 with vibration=1.0,
+    which causes false critical classifications from sensor noise alone.
+    Downgrade to warning unless multiple sensors independently confirm a real event.
+    """
+    if alert != "critical":
+        return alert
+    active_vibration = vibration > 1.15   # actual movement above gravity baseline
+    high_water = water_depth > 0.65       # clearly above critical threshold
+    high_humidity = humidity > 82         # storm-level humidity
+    confirmed = sum([active_vibration, high_water, high_humidity])
+    if confirmed < 2:
+        return "warning"
+    return "critical"
 
 
 @app.get("/summary")
@@ -172,9 +247,8 @@ def get_summary() -> dict:
     env = _compute_env_risk()
 
     csv_conclusion = (
-        f"Scripps ocean data: avg temp {avg_temp:.2f}°C, "
-        f"avg current speed {env['avg_cspd']:.3f} m/s (peak {env['max_cspd']:.3f} m/s), "
-        f"environmental risk: {env['label']} ({high_risk_count} elevated-risk readings)."
+        f"Scripps ocean data ({env['label']} environmental risk): {env['env_detail']}; "
+        f"avg ocean temp {avg_temp:.2f}°C, {high_risk_count} elevated-risk readings historically."
     )
 
     # --- Arduino conclusions from latest events ---
@@ -192,7 +266,8 @@ def get_summary() -> dict:
     else:
         d1_depth_str = "Deep"
 
-    arduino_alert = dev1["alert_level"] if dev1 else "normal"
+    raw_alert = dev1["alert_level"] if dev1 else "normal"
+    arduino_alert = _adjust_arduino_alert(raw_alert, d1_water_depth, d1_humidity, d1_vibration)
     alert_map = {"normal": 0, "warning": 1, "critical": 2}
     arduino_risk_int = alert_map.get(arduino_alert, 0)
 

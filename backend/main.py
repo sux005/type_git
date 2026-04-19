@@ -10,7 +10,7 @@ import os
 import httpx
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-_GEMINI_MODEL = "gemini-2.0-flash-lite"
+_GEMINI_MODEL = "gemini-2.5-flash"
 _gemini_cache: dict = {"summary": None, "fetched_at": 0.0}
 _GEMINI_TTL = 300  # 5 minutes
 

@@ -342,24 +342,108 @@ def _(avg_temp, color_risk, df, events, high_risk, map_risk, mo, theme_toggle):
         insight_html,
     ])
 
+    # --- Ocean background colors per theme ---
+    if is_dark:
+        ocean_grad  = "linear-gradient(to bottom,#0f172a,#0c1a2e,#0f2744)"
+        w1, w2, w3  = "#1e3a8a", "#0c4a6e", "#075985"
+        title_color = "rgba(186,230,253,0.9)"
+        sub_color   = "rgba(125,211,252,0.65)"
+    else:
+        ocean_grad  = "linear-gradient(to bottom,#eff6ff,#ecfeff,#dbeafe)"
+        w1, w2, w3  = "#3b82f6", "#06b6d4", "#0ea5e9"
+        title_color = "rgba(30,58,138,0.85)"
+        sub_color   = "rgba(29,78,216,0.65)"
+
     # --- Final layout ---
     mo.vstack([
         mo.Html(f"""
             <style>
                 :root {{ color-scheme: {"dark" if is_dark else "light"}; }}
-                body {{
-                    background-color: {bg} !important;
+                html, body,
+                .marimo, [class*="marimo"], main, #root, #app {{
+                    background: transparent !important;
                     color: {text_main} !important;
                 }}
-                .marimo, [class*="marimo"], main, #root, #app {{
-                    background-color: {bg} !important;
-                }}
                 p, span, div, h1, h2, h3, h4 {{ color: inherit; }}
+                @keyframes bubble-float {{
+                    0%,100% {{ transform:translateY(0) translateX(0); opacity:0.25; }}
+                    25%      {{ transform:translateY(-30px) translateX(10px); opacity:0.5; }}
+                    50%      {{ transform:translateY(-55px) translateX(-8px); opacity:0.3; }}
+                    75%      {{ transform:translateY(-25px) translateX(5px); opacity:0.4; }}
+                }}
             </style>
-            <div style="background:{bg};margin:-16px -24px 0 -24px;padding:24px 24px 0 24px;">
-                <h1 style="font-size:36px;font-weight:800;color:{text_main};margin:0 0 16px 0;">
+            <script>
+            (function() {{
+                // remove stale bg on theme toggle
+                var old = document.getElementById('ocean-bg');
+                if (old) old.remove();
+
+                var bg = document.createElement('div');
+                bg.id = 'ocean-bg';
+                bg.style.cssText = [
+                    'position:fixed','inset:0','z-index:0',
+                    'overflow:hidden','pointer-events:none',
+                    'background:{ocean_grad}'
+                ].join(';');
+
+                bg.innerHTML = `
+                  <div style="position:absolute;inset:0;opacity:0.3;">
+                    <svg style="position:absolute;width:100%;height:100%;"
+                         xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 320" preserveAspectRatio="none">
+                      <path fill="{w1}" fill-opacity="0.4"
+                            d="M0,96L48,112C96,128,192,160,288,160C384,160,480,128,576,122.7C672,117,768,139,864,138.7C960,139,1056,117,1152,101.3C1248,85,1344,75,1392,69.3L1440,64L1440,320L0,320Z">
+                        <animate attributeName="d" dur="10s" repeatCount="indefinite" values="
+                          M0,96L48,112C96,128,192,160,288,160C384,160,480,128,576,122.7C672,117,768,139,864,138.7C960,139,1056,117,1152,101.3C1248,85,1344,75,1392,69.3L1440,64L1440,320L0,320Z;
+                          M0,128L48,138.7C96,149,192,171,288,165.3C384,160,480,128,576,128C672,128,768,160,864,165.3C960,171,1056,149,1152,133.3C1248,117,1344,107,1392,101.3L1440,96L1440,320L0,320Z;
+                          M0,96L48,112C96,128,192,160,288,160C384,160,480,128,576,122.7C672,117,768,139,864,138.7C960,139,1056,117,1152,101.3C1248,85,1344,75,1392,69.3L1440,64L1440,320L0,320Z"/>
+                      </path>
+                    </svg>
+                  </div>
+                  <div style="position:absolute;inset:0;opacity:0.2;">
+                    <svg style="position:absolute;width:100%;height:100%;transform:translateY(20%);"
+                         xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 320" preserveAspectRatio="none">
+                      <path fill="{w2}" fill-opacity="0.4"
+                            d="M0,192L48,197.3C96,203,192,213,288,192C384,171,480,117,576,112C672,107,768,149,864,165.3C960,181,1056,171,1152,154.7C1248,139,1344,117,1392,106.7L1440,96L1440,320L0,320Z">
+                        <animate attributeName="d" dur="15s" repeatCount="indefinite" values="
+                          M0,192L48,197.3C96,203,192,213,288,192C384,171,480,117,576,112C672,107,768,149,864,165.3C960,181,1056,171,1152,154.7C1248,139,1344,117,1392,106.7L1440,96L1440,320L0,320Z;
+                          M0,160L48,170.7C96,181,192,203,288,197.3C384,192,480,160,576,138.7C672,117,768,107,864,122.7C960,139,1056,181,1152,186.7C1248,192,1344,160,1392,144L1440,128L1440,320L0,320Z;
+                          M0,192L48,197.3C96,203,192,213,288,192C384,171,480,117,576,112C672,107,768,149,864,165.3C960,181,1056,171,1152,154.7C1248,139,1344,117,1392,106.7L1440,96L1440,320L0,320Z"/>
+                      </path>
+                    </svg>
+                  </div>
+                  <div style="position:absolute;inset:0;opacity:0.25;">
+                    <svg style="position:absolute;width:100%;height:100%;transform:translateY(40%);"
+                         xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 320" preserveAspectRatio="none">
+                      <path fill="{w3}" fill-opacity="0.3"
+                            d="M0,224L48,213.3C96,203,192,181,288,181.3C384,181,480,203,576,213.3C672,224,768,224,864,208C960,192,1056,160,1152,154.7C1248,149,1344,171,1392,181.3L1440,192L1440,320L0,320Z">
+                        <animate attributeName="d" dur="12s" repeatCount="indefinite" values="
+                          M0,224L48,213.3C96,203,192,181,288,181.3C384,181,480,203,576,213.3C672,224,768,224,864,208C960,192,1056,160,1152,154.7C1248,149,1344,171,1392,181.3L1440,192L1440,320L0,320Z;
+                          M0,256L48,240C96,224,192,192,288,181.3C384,171,480,181,576,197.3C672,213,768,235,864,229.3C960,224,1056,192,1152,170.7C1248,149,1344,139,1392,133.3L1440,128L1440,320L0,320Z;
+                          M0,224L48,213.3C96,203,192,181,288,181.3C384,181,480,203,576,213.3C672,224,768,224,864,208C960,192,1056,160,1152,154.7C1248,149,1344,171,1392,181.3L1440,192L1440,320L0,320Z"/>
+                      </path>
+                    </svg>
+                  </div>
+                  <div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(255,255,255,0.06),transparent);"></div>
+                `;
+
+                document.body.insertBefore(bg, document.body.firstChild);
+
+                // lift all siblings above the fixed bg
+                Array.from(document.body.children).forEach(function(el) {{
+                    if (el.id !== 'ocean-bg') {{
+                        el.style.position = 'relative';
+                        el.style.zIndex   = '1';
+                    }}
+                }});
+            }})();
+            </script>
+            <div style="margin:-16px -24px 0 -24px;padding:28px 24px 20px 24px;text-align:center;">
+                <h1 style="font-size:38px;font-weight:800;color:{title_color};margin:0 0 8px 0;">
                     🌊 Flood Monitoring System
                 </h1>
+                <p style="font-size:15px;color:{sub_color};margin:0;">
+                    Real-time Coastal Sensor Dashboard
+                </p>
             </div>
         """),
         theme_toggle,

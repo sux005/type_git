@@ -71,6 +71,14 @@ def _(avg_temp, color_risk, df, events, high_risk, map_risk, mo, theme_toggle):
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import matplotlib.dates as mdates
+    import sys, os
+    _backend = os.path.join(os.getcwd(), "backend")
+    if _backend not in sys.path:
+        sys.path.insert(0, _backend)
+    try:
+        from gemini_client import get_sensor_overview as _get_sensor_overview
+    except Exception:
+        _get_sensor_overview = None
 
     is_dark = theme_toggle.value
 
@@ -141,6 +149,27 @@ def _(avg_temp, color_risk, df, events, high_risk, map_risk, mo, theme_toggle):
     risk_d1       = predict_device1(d1_temp, d1_depth_str)
     risk_d2       = predict_device2(d2_velocity)
     combined_risk = predict_combined(d1_temp, d1_depth_str, d2_velocity)
+
+    # --- Gemini overview ---
+    _alert_map   = {0: "normal", 1: "warning", 2: "critical"}
+    _alert_level = _alert_map.get(combined_risk, "normal")
+    if _get_sensor_overview:
+        try:
+            _overview_text = _get_sensor_overview(
+                alert_level=_alert_level,
+                combined_risk=combined_risk,
+                d1_temp=d1_temp,
+                d1_depth=d1_depth_str,
+                d1_risk=risk_d1,
+                d2_velocity=d2_velocity_str,
+                d2_risk=risk_d2,
+                avg_temp=avg_temp,
+                high_risk_count=high_risk,
+            )
+        except Exception as e:
+            _overview_text = f"AI overview unavailable: {e}"
+    else:
+        _overview_text = "AI overview unavailable (gemini_client not loaded)."
 
     col_d1       = color_risk(risk_d1)
     col_d2       = color_risk(risk_d2)
@@ -289,10 +318,19 @@ def _(avg_temp, color_risk, df, events, high_risk, map_risk, mo, theme_toggle):
         </div>
     """)
 
+    gemini_html = mo.Html(f"""
+    <div style="background:{surface};border:{card_border};border-radius:10px;
+                padding:20px 24px;min-height:120px;">
+        <div style="color:{text_main};font-size:20px;line-height:1.7;">{_overview_text}</div>
+    </div>
+    """)
+
     right_col = mo.vstack([
         mo.Html(f"<h1 style='font-size:26px;font-weight:700;color:{text_main};margin-bottom:16px;'>📊 Prediction and Data Layer</h1>"),
         mo.Html(f"<h2 style='font-size:20px;color:{text_main};margin:8px 0 10px;'>Current System State</h2>"),
         metrics_html,
+        mo.Html(f"<h2 style='font-size:20px;color:{text_main};margin:24px 0 10px;'>Overview</h2>"),
+        gemini_html,
         mo.Html(f"<h2 style='font-size:20px;color:{text_main};margin:24px 0 10px;'>Temperature Over Time</h2>"),
         mo.ui.matplotlib(ax1),
         mo.Html(f"<h2 style='font-size:20px;color:{text_main};margin:24px 0 10px;'>Risk Distribution</h2>"),

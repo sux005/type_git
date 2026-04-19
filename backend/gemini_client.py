@@ -39,3 +39,38 @@ Be specific about what the data means. Do not use filler phrases."""
         return response.text.strip()
     except Exception:
         return _fallback_explanation(alert_level, risk_score)
+
+
+def get_sensor_overview(
+    alert_level: str,
+    combined_risk: int,
+    d1_temp: float,
+    d1_depth: str,
+    d1_risk: int,
+    d2_velocity: str,
+    d2_risk: int,
+    avg_temp: float,
+    high_risk_count: int,
+) -> str:
+    risk_label = {0: "Normal", 1: "Warning", 2: "Critical"}
+    if not _api_key:
+        return _fallback_explanation(alert_level, combined_risk / 2.0)
+    prompt = f"""You are a coastal flood monitoring AI for emergency responders.
+
+Live sensor readings:
+- Device 1 (Temperature + Depth): {d1_temp:.1f}°C, depth={d1_depth}, predicted risk={risk_label.get(d1_risk, d1_risk)}
+- Device 2 (Water Velocity): velocity={d2_velocity}, predicted risk={risk_label.get(d2_risk, d2_risk)}
+- Combined system risk: {risk_label.get(combined_risk, combined_risk)} (level {combined_risk}/2)
+- Historical average temperature: {avg_temp:.2f}°C
+- High-risk events in dataset: {high_risk_count}
+
+Write a concise 2-sentence overview of current flood conditions based exactly on these sensor values.
+Reference the actual numbers. Do not use filler phrases."""
+    try:
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt,
+        )
+        return response.text.strip()
+    except Exception:
+        return _fallback_explanation(alert_level, combined_risk / 2.0)

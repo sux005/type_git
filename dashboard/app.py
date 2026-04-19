@@ -1,12 +1,13 @@
 import streamlit as st
 import pandas as pd
-import json
+import requests
 import os
 
 st.set_page_config(layout="wide")
 st.title("Explainable Ocean Monitoring System")
 
 BASE = os.path.dirname(__file__)
+EC2_URL = "http://3.15.176.0:8000"
 
 @st.cache_data
 def load_data():
@@ -18,9 +19,10 @@ df = load_data()
 
 def load_events():
     try:
-        with open(os.path.join(BASE, "events.json"), "r") as f:
-            return json.load(f)
-    except:
+        response = requests.get(f"{EC2_URL}/events", timeout=5)
+        response.raise_for_status()
+        return response.json().get("events", [])
+    except Exception:
         return []
 
 events = load_events()

@@ -58,7 +58,7 @@ void loop() {
   Monitor.println(payload);
   Bridge.call("post_event", payload);
 
-  delay(2000);
+  delay(1000);
 }
 
 const char* classify(float water, float humidity, float dist, float vibration) {

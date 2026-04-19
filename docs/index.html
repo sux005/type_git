@@ -181,10 +181,10 @@
 <div class="summary-section">
   <h2 style="display:flex;align-items:center;justify-content:space-between;">
     <span>AI Overview · Gemini 2.5 Flash</span>
-    <button id="refresh-btn" onclick="refreshSummary()" style="
+    <button id="refresh-btn" onclick="generateSummary()" style="
       background:#1f2d4a;border:1px solid #2d3f5c;color:#a0b4d0;
       padding:5px 14px;border-radius:6px;font-size:0.75rem;cursor:pointer;
-      letter-spacing:0.04em;text-transform:uppercase;">↻ Refresh</button>
+      letter-spacing:0.04em;text-transform:uppercase;">✦ Generate AI Summary</button>
   </h2>
   <div class="ai-box">
     <div class="conclusions">
@@ -318,10 +318,9 @@ setInterval(poll, 1000);
 
 const ENV_RISK_COLORS = { normal: "#22c55e", elevated: "#f59e0b", high: "#ef4444" };
 
-async function pollSummary(force = false) {
+async function pollSummary() {
   try {
-    const url = force ? `${EC2}/summary?force=true` : `${EC2}/summary`;
-    const res = await fetch(url);
+    const res = await fetch(`${EC2}/summary`);
     const data = await res.json();
 
     const envEl = document.getElementById("val-env-risk");
@@ -331,7 +330,18 @@ async function pollSummary(force = false) {
 
     document.getElementById("arduino-conclusion").textContent = data.arduino_conclusion || "—";
     document.getElementById("csv-conclusion").textContent = data.csv_conclusion || "—";
+  } catch (e) {
+    // silent — data boxes will just stay at last value
+  }
+}
 
+async function generateSummary() {
+  const btn = document.getElementById("refresh-btn");
+  btn.textContent = "Generating...";
+  btn.disabled = true;
+  try {
+    const res = await fetch(`${EC2}/summary?force=true`);
+    const data = await res.json();
     const summary = data.gemini_summary || "";
     if (summary.startsWith("[Gemini error 429")) {
       document.getElementById("gemini-summary").textContent = "⚠️ Gemini quota reached — data above is current.";
@@ -339,21 +349,14 @@ async function pollSummary(force = false) {
       document.getElementById("gemini-summary").textContent = summary || "AI summary unavailable.";
     }
   } catch (e) {
-    document.getElementById("gemini-summary").textContent = "AI summary unavailable — retrying...";
+    document.getElementById("gemini-summary").textContent = "AI summary unavailable.";
   }
-}
-
-async function refreshSummary() {
-  const btn = document.getElementById("refresh-btn");
-  btn.textContent = "↻ Loading...";
-  btn.disabled = true;
-  await pollSummary(true);
-  btn.textContent = "↻ Refresh";
+  btn.textContent = "✦ Generate AI Summary";
   btn.disabled = false;
 }
 
-pollSummary(true);
-setInterval(() => pollSummary(false), 30000);
+pollSummary();
+setInterval(pollSummary, 30000);
 </script>
 </body>
 </html>

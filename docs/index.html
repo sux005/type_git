@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Coastal Flood Monitor</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #0a0f1e;
+      color: #e0e8ff;
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 28px;
+    }
+
+    header h1 { font-size: 1.6rem; font-weight: 700; letter-spacing: 0.02em; }
+    header p  { font-size: 0.85rem; color: #6b7fa3; margin-top: 2px; }
+
+    #status-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: #22c55e; display: inline-block;
+      margin-right: 8px; animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0%,100% { opacity: 1; } 50% { opacity: 0.3; }
+    }
+
+    .alert-badge {
+      padding: 6px 20px; border-radius: 999px;
+      font-weight: 700; font-size: 0.95rem; text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .badge-normal   { background: #14532d; color: #86efac; }
+    .badge-warning  { background: #78350f; color: #fde68a; }
+    .badge-critical { background: #7f1d1d; color: #fca5a5; animation: flash 0.8s infinite; }
+    @keyframes flash { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+
+    .card {
+      background: #111827;
+      border: 1px solid #1f2d4a;
+      border-radius: 12px;
+      padding: 20px 16px;
+      text-align: center;
+    }
+    .card .label { font-size: 0.75rem; color: #6b7fa3; text-transform: uppercase; letter-spacing: 0.06em; }
+    .card .value { font-size: 2rem; font-weight: 700; margin: 8px 0 4px; }
+    .card .unit  { font-size: 0.8rem; color: #6b7fa3; }
+
+    .charts {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 20px;
+    }
+
+    .chart-box {
+      background: #111827;
+      border: 1px solid #1f2d4a;
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .chart-box h3 { font-size: 0.85rem; color: #6b7fa3; margin-bottom: 14px; text-transform: uppercase; letter-spacing: 0.06em; }
+
+    footer {
+      text-align: center;
+      margin-top: 32px;
+      font-size: 0.75rem;
+      color: #374151;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>🌊 Coastal Flood Monitor</h1>
+    <p><span id="status-dot"></span><span id="last-updated">Connecting...</span></p>
+  </div>
+  <span id="alert-badge" class="alert-badge badge-normal">Normal</span>
+</header>
+
+<div class="cards">
+  <div class="card">
+    <div class="label">Water Depth</div>
+    <div class="value" id="val-water">—</div>
+    <div class="unit">0–1 scale</div>
+  </div>
+  <div class="card">
+    <div class="label">Humidity</div>
+    <div class="value" id="val-humidity">—</div>
+    <div class="unit">%</div>
+  </div>
+  <div class="card">
+    <div class="label">Temperature</div>
+    <div class="value" id="val-temp">—</div>
+    <div class="unit">°C</div>
+  </div>
+  <div class="card">
+    <div class="label">Vibration</div>
+    <div class="value" id="val-vibration">—</div>
+    <div class="unit">g</div>
+  </div>
+  <div class="card">
+    <div class="label">Distance</div>
+    <div class="value" id="val-distance">—</div>
+    <div class="unit">cm</div>
+  </div>
+</div>
+
+<div class="charts">
+  <div class="chart-box">
+    <h3>Water Depth</h3>
+    <canvas id="chart-water"></canvas>
+  </div>
+  <div class="chart-box">
+    <h3>Humidity</h3>
+    <canvas id="chart-humidity"></canvas>
+  </div>
+  <div class="chart-box">
+    <h3>Temperature</h3>
+    <canvas id="chart-temp"></canvas>
+  </div>
+  <div class="chart-box">
+    <h3>Vibration</h3>
+    <canvas id="chart-vibration"></canvas>
+  </div>
+</div>
+
+<footer>DataHacks 2026 · Uno Q → AWS EC2 · Edge AI KNN Classifier</footer>
+
+<script>
+const EC2 = "http://3.15.176.0:8000";
+const MAX_POINTS = 30;
+
+function makeChart(id, label, color) {
+  return new Chart(document.getElementById(id), {
+    type: "line",
+    data: {
+      labels: [],
+      datasets: [{
+        label,
+        data: [],
+        borderColor: color,
+        backgroundColor: color + "22",
+        borderWidth: 2,
+        pointRadius: 2,
+        tension: 0.3,
+        fill: true,
+      }]
+    },
+    options: {
+      animation: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: "#6b7fa3", maxTicksLimit: 6 }, grid: { color: "#1f2d4a" } },
+        y: { ticks: { color: "#6b7fa3" }, grid: { color: "#1f2d4a" } }
+      }
+    }
+  });
+}
+
+const charts = {
+  water:     makeChart("chart-water",     "Water Depth", "#38bdf8"),
+  humidity:  makeChart("chart-humidity",  "Humidity",    "#a78bfa"),
+  temp:      makeChart("chart-temp",      "Temperature", "#fb923c"),
+  vibration: makeChart("chart-vibration", "Vibration",   "#34d399"),
+};
+
+function push(chart, label, value) {
+  chart.data.labels.push(label);
+  chart.data.datasets[0].data.push(value);
+  if (chart.data.labels.length > MAX_POINTS) {
+    chart.data.labels.shift();
+    chart.data.datasets[0].data.shift();
+  }
+  chart.update();
+}
+
+function setAlert(level) {
+  const badge = document.getElementById("alert-badge");
+  badge.textContent = level.charAt(0).toUpperCase() + level.slice(1);
+  badge.className = "alert-badge badge-" + level;
+}
+
+async function poll() {
+  try {
+    const res = await fetch(`${EC2}/events?limit=30`);
+    const data = await res.json();
+    const events = data.events;
+    if (!events || events.length === 0) return;
+
+    // Rebuild charts from recent history
+    charts.water.data.labels = [];     charts.water.data.datasets[0].data = [];
+    charts.humidity.data.labels = [];  charts.humidity.data.datasets[0].data = [];
+    charts.temp.data.labels = [];      charts.temp.data.datasets[0].data = [];
+    charts.vibration.data.labels = []; charts.vibration.data.datasets[0].data = [];
+
+    events.forEach(e => {
+      const t = new Date(e.server_received_at).toLocaleTimeString();
+      if (e.water_depth  != null) { charts.water.data.labels.push(t);     charts.water.data.datasets[0].data.push(e.water_depth); }
+      if (e.humidity     != null) { charts.humidity.data.labels.push(t);  charts.humidity.data.datasets[0].data.push(e.humidity); }
+      if (e.temp         != null) { charts.temp.data.labels.push(t);      charts.temp.data.datasets[0].data.push(e.temp); }
+      if (e.vibration    != null) { charts.vibration.data.labels.push(t); charts.vibration.data.datasets[0].data.push(e.vibration); }
+    });
+
+    Object.values(charts).forEach(c => c.update());
+
+    const latest = events[events.length - 1];
+    document.getElementById("val-water").textContent     = latest.water_depth?.toFixed(3) ?? "—";
+    document.getElementById("val-humidity").textContent  = latest.humidity?.toFixed(1)    ?? "—";
+    document.getElementById("val-temp").textContent      = latest.temp?.toFixed(1)        ?? "—";
+    document.getElementById("val-vibration").textContent = latest.vibration?.toFixed(3)   ?? "—";
+    document.getElementById("val-distance").textContent  = latest.distance != null && latest.distance >= 0 ? latest.distance.toFixed(0) : "—";
+    document.getElementById("last-updated").textContent  = "Live · " + new Date(latest.server_received_at).toLocaleTimeString();
+
+    setAlert(latest.alert_level || "normal");
+  } catch (e) {
+    document.getElementById("last-updated").textContent = "Connection error — retrying...";
+  }
+}
+
+poll();
+setInterval(poll, 2000);
+</script>
+</body>
+</html>

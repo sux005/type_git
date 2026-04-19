@@ -4,6 +4,8 @@ from typing import Literal, Optional
 from fastapi import FastAPI, Request
 from pydantic import BaseModel, Field
 
+from gemini_client import get_explanation
+
 app = FastAPI(title="Edge Event API")
 
 # In-memory event store for hackathon/demo use.
@@ -64,6 +66,12 @@ def list_events(limit: int = 50) -> dict:
         "count": len(EVENTS),
         "events": EVENTS[-safe_limit:],
     }
+
+
+@app.get("/explanation")
+def explanation(alert_level: str = "normal", risk_score: float = 0.0) -> dict:
+    text = get_explanation(alert_level.lower(), risk_score)
+    return {"explanation": text, "alert_level": alert_level, "risk_score": risk_score}
 
 
 @app.get("/events/latest")

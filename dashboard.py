@@ -1,4 +1,3 @@
-
 import marimo
 
 __generated_with = "0.23.1"
@@ -10,6 +9,7 @@ def _():
     import marimo as mo
     import pandas as pd
     import json
+
     return json, mo, pd
 
 
@@ -56,7 +56,7 @@ def _(df):
     latest = df.iloc[-1]
     avg_temp = df["TEMP"].mean()
     high_risk = df[df["RISK_SCORE"] >= 2].shape[0]
-    return avg_temp, high_risk, latest
+    return avg_temp, high_risk
 
 
 @app.cell
@@ -66,7 +66,7 @@ def _(mo):
 
 
 @app.cell
-def _(avg_temp, color_risk, df, events, high_risk, latest, map_risk, mo, theme_toggle):
+def _(avg_temp, color_risk, df, events, high_risk, map_risk, mo, theme_toggle):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt

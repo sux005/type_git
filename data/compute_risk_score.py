@@ -6,33 +6,37 @@ import sys
 def normalize(series: pd.Series) -> pd.Series:
     lo, hi = series.min(), series.max()
     if hi == lo:
-        return pd.Series(np.zeros(len(series)))
+        return pd.Series(np.zeros(len(series)), index=series.index)
     return (series - lo) / (hi - lo)
 
 
 def compute_risk_score(df: pd.DataFrame) -> pd.Series:
     """
-    Fill in weights and column names after running inspect_dataset.py.
-    Target: normalized 0.0–1.0 float where 1.0 = maximum flood risk.
+    Risk score from CCE mooring data (output.csv).
+    Uses current speed, pressure, and temperature as flood risk proxies.
+    Target: normalized 0.0-1.0 where 1.0 = maximum flood risk.
     """
     score = pd.Series(np.zeros(len(df)), index=df.index)
-
-    # --- ADAPT THESE after seeing dataset columns ---
-    # Example structure: (column_name, weight)
-    # Weights should sum to 1.0
-    candidates = [
-        ("tide_level",   0.4),
-        ("wave_height",  0.3),
-        ("storm_surge",  0.3),
-    ]
-
     total_weight = 0.0
-    for col, weight in candidates:
-        if col in df.columns:
-            score += weight * normalize(df[col])
-            total_weight += weight
 
-    # Rescale if some columns were missing
+    # Current speed — stronger currents = higher flood risk (weight 0.5)
+    if "CSPD" in df.columns:
+        clean = df["CSPD"].where(df.get("CSPD_QC", pd.Series(1, index=df.index)) == 1)
+        score += 0.5 * normalize(clean.fillna(clean.median()))
+        total_weight += 0.5
+
+    # Pressure — higher pressure anomaly can indicate surge (weight 0.3)
+    if "PRES" in df.columns:
+        clean = df["PRES"].where(df.get("PRES_QC", pd.Series(1, index=df.index)) == 1)
+        score += 0.3 * normalize(clean.fillna(clean.median()))
+        total_weight += 0.3
+
+    # Temperature — anomalously warm water can indicate unusual ocean state (weight 0.2)
+    if "TEMP" in df.columns:
+        clean = df["TEMP"].where(df.get("TEMP_QC", pd.Series(1, index=df.index)) == 1)
+        score += 0.2 * normalize(clean.fillna(clean.median()))
+        total_weight += 0.2
+
     if 0 < total_weight < 1.0:
         score = score / total_weight
 

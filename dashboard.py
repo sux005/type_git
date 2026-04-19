@@ -9,23 +9,49 @@ app = marimo.App(width="full")
 def _():
     import marimo as mo
     import pandas as pd
-    import json
-    return json, mo, pd
+    import requests
+    return mo, pd, requests
 
 
 @app.cell
 def _(pd):
-    df = pd.read_csv("final_output.csv")
+    df = pd.read_csv("data/final_output.csv")
     df["DATE Time"] = pd.to_datetime(df["DATE Time"])
     return (df,)
 
 
 @app.cell
-def _(json):
+def _(requests):
+    def _alert_to_risk(alert_level: str) -> int:
+        level = str(alert_level).upper()
+        if level == "CRITICAL":
+            return 2
+        elif level == "WARNING":
+            return 1
+        return 0
+
+    def _translate(raw: dict):
+        device_id = raw.get("device_id")
+        alert = raw.get("alert_level", "NORMAL")
+        risk = _alert_to_risk(alert)
+        features = raw.get("features") or {}
+        current_water = features.get("current_water", 0)
+        timestamp = raw.get("server_received_at", "—")
+        if device_id == 1:
+            depth_map = {0: "Shallow", 1: "Normal", 2: "Deep"}
+            return {"device_id": "Device 1", "temp": round(current_water / 1023 * 30, 1),
+                    "depth": depth_map.get(risk, "Shallow"), "timestamp": timestamp}
+        elif device_id == 2:
+            velocity_map = {0: "low", 1: "normal", 2: "high"}
+            return {"device_id": "Device 2", "water velocity": velocity_map.get(risk, "normal"),
+                    "timestamp": timestamp}
+        return None
+
     try:
-        with open("events_dummy.json", "r") as f:
-            events = json.load(f)
-    except:
+        resp = requests.get("http://3.15.176.0:8000/events", timeout=5)
+        resp.raise_for_status()
+        events = [e for raw in resp.json().get("events", []) if (e := _translate(raw)) is not None]
+    except Exception:
         events = []
     return (events,)
 

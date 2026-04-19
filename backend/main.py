@@ -1,11 +1,13 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional
+import time
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pandas as pd
 import os
+import httpx
 try:
     from .gemini_client import get_sensor_overview
 except ImportError:
@@ -32,6 +34,60 @@ df["DateTime"] = pd.to_datetime(df["DateTime"])
 # Load raw Scripps CSV for richer environmental signals (CSPD, PRES, currents)
 raw_csv_path = os.path.join(os.path.dirname(__file__), "..", "data", "output.csv")
 df_raw = pd.read_csv(raw_csv_path) if os.path.exists(raw_csv_path) else pd.DataFrame()
+
+# ---------------------------------------------------------------------------
+# Live NDBC buoy fetch
+#   CCE2 (34.302, -120.802) → 46054 West Santa Barbara  (~32 km, same area as CSV)
+#   CCE1 (33.437, -122.462) → 46042 Monterey            (same longitude, CA Current)
+# ---------------------------------------------------------------------------
+NDBC_BUOYS = {
+    "CCE2": {"id": "46054", "lat": 34.274, "lon": -120.459, "desc": "West Santa Barbara (near CCE2)"},
+    "CCE1": {"id": "46042", "lat": 36.785, "lon": -122.469, "desc": "Monterey (nearest to CCE1 longitude)"},
+}
+_ndbc_cache: dict = {"data": None, "fetched_at": 0.0}
+_NDBC_TTL = 600  # refresh every 10 minutes
+
+
+def _parse_ndbc_line(line: str) -> dict:
+    """Parse one data row from NDBC standard meteorological text."""
+    parts = line.split()
+    if len(parts) < 15:
+        return {}
+    def f(v): return None if v == "MM" else float(v)
+    return {
+        "wdir": f(parts[5]),   # wind direction (deg)
+        "wspd": f(parts[6]),   # wind speed (m/s)
+        "wvht": f(parts[8]),   # wave height (m)
+        "dpd":  f(parts[9]),   # dominant wave period (s)
+        "pres": f(parts[12]),  # atmospheric pressure (hPa)
+        "atmp": f(parts[13]),  # air temp (°C)
+        "wtmp": f(parts[14]),  # sea surface temp (°C)
+    }
+
+
+def fetch_live_ndbc() -> dict:
+    """Fetch latest reading from both CCE-adjacent NDBC buoys. Cached 10 min."""
+    now = time.time()
+    if _ndbc_cache["data"] and (now - _ndbc_cache["fetched_at"]) < _NDBC_TTL:
+        return _ndbc_cache["data"]
+
+    result = {}
+    for name, buoy in NDBC_BUOYS.items():
+        url = f"https://www.ndbc.noaa.gov/data/realtime2/{buoy['id']}.txt"
+        try:
+            resp = httpx.get(url, timeout=8)
+            lines = [l for l in resp.text.splitlines() if not l.startswith("#") and l.strip()]
+            if lines:
+                latest = _parse_ndbc_line(lines[0])
+                latest["buoy_id"] = buoy["id"]
+                latest["desc"] = buoy["desc"]
+                result[name] = latest
+        except Exception:
+            result[name] = None
+
+    _ndbc_cache["data"] = result
+    _ndbc_cache["fetched_at"] = now
+    return result
 
 
 class Event(BaseModel):
@@ -145,63 +201,90 @@ def latest_event() -> dict:
 
 def _compute_env_risk() -> dict:
     """
-    Derive environmental risk from Scripps mooring data using percentile-based
-    multi-factor scoring rather than simple averages.
-
-    Risk factors:
-      - Current speed (CSPD): % of readings above the 75th percentile threshold
-      - Vertical current (WCUR): elevated upwelling/downwelling = storm indicator
-      - Pressure variance (PRES): high std dev = storm/surge conditions
-      - Temperature anomaly (TEMP): deviation from median signals unusual ocean state
+    Two-layer environmental risk:
+      1. LIVE — NDBC buoy readings (waves, wind, pressure) for current conditions
+      2. HISTORICAL — Scripps CCE mooring CSV (percentile-based multi-factor baseline)
+    Risk score = max(live_score, historical_score).
     """
-    if df_raw.empty:
-        return {"label": "normal", "score": 0, "avg_cspd": 0.0, "max_cspd": 0.0,
-                "high_current_pct": 0.0, "env_detail": "No ocean data available."}
-
     risk_points = 0
     details = []
+    live_detail_parts = []
+    avg_cspd, max_cspd, high_pct = 0.0, 0.0, 0.0
 
-    # --- Current speed ---
-    if "CSPD" in df_raw.columns:
-        cspd = df_raw["CSPD"].dropna()
-        avg_cspd = float(cspd.mean())
-        max_cspd = float(cspd.max())
-        p75 = float(cspd.quantile(0.75))
-        p95 = float(cspd.quantile(0.95))
-        high_pct = float((cspd > p75).mean() * 100)
-        details.append(f"current {avg_cspd:.3f} m/s avg, peak {max_cspd:.3f} m/s, p95={p95:.3f} m/s")
-        if p95 > 0.45 or high_pct > 30:
-            risk_points += 2
-        elif p95 > 0.28 or high_pct > 20:
-            risk_points += 1
-    else:
-        avg_cspd, max_cspd, high_pct = 0.0, 0.0, 0.0
+    # ------------------------------------------------------------------
+    # Layer 1: LIVE NDBC data (current conditions)
+    # ------------------------------------------------------------------
+    buoys = fetch_live_ndbc()
 
-    # --- Vertical current (upwelling/surge indicator) ---
-    if "WCUR" in df_raw.columns:
-        wcur = df_raw["WCUR"].dropna().abs()
-        high_vert_pct = float((wcur > wcur.quantile(0.90)).mean() * 100)
-        details.append(f"vertical current anomaly {high_vert_pct:.1f}% of time")
-        if high_vert_pct > 15:
-            risk_points += 1
+    for cce_name, reading in buoys.items():
+        if not reading:
+            continue
+        buoy_parts = [f"{cce_name} ({reading['desc']})"]
 
-    # --- Pressure variance (storm indicator) ---
-    if "PRES" in df_raw.columns:
-        pres = df_raw["PRES"].dropna()
-        pres_std = float(pres.std())
-        details.append(f"pressure std {pres_std:.3f} dbar")
-        if pres_std > 1.5:
-            risk_points += 2
-        elif pres_std > 0.8:
-            risk_points += 1
+        # Wave height — WVHT > 2m = elevated, > 3.5m = high
+        wvht = reading.get("wvht")
+        if wvht is not None:
+            buoy_parts.append(f"waves {wvht:.1f}m")
+            if wvht > 3.5:
+                risk_points += 2
+            elif wvht > 2.0:
+                risk_points += 1
 
-    # --- Temperature anomaly ---
-    if "TEMP" in df_raw.columns:
-        temp = df_raw["TEMP"].dropna()
-        temp_range = float(temp.max() - temp.min())
-        details.append(f"temp range {temp_range:.2f}°C")
-        if temp_range > 6:
-            risk_points += 1
+        # Wind speed — WSPD > 10 m/s (~20 knots) = elevated, > 17 m/s (~33 kts) = high
+        wspd = reading.get("wspd")
+        if wspd is not None:
+            buoy_parts.append(f"wind {wspd:.1f} m/s")
+            if wspd > 17:
+                risk_points += 2
+            elif wspd > 10:
+                risk_points += 1
+
+        # Pressure — below 1005 hPa = storm, below 1010 = low
+        pres = reading.get("pres")
+        if pres is not None:
+            buoy_parts.append(f"pressure {pres:.0f} hPa")
+            if pres < 1005:
+                risk_points += 2
+            elif pres < 1010:
+                risk_points += 1
+
+        # Sea surface temp for context (no risk points, just reporting)
+        wtmp = reading.get("wtmp")
+        if wtmp is not None:
+            buoy_parts.append(f"SST {wtmp:.1f}°C")
+
+        live_detail_parts.append(", ".join(buoy_parts))
+
+    if live_detail_parts:
+        details.append("Live buoys — " + " | ".join(live_detail_parts))
+
+    # ------------------------------------------------------------------
+    # Layer 2: HISTORICAL Scripps CSV (baseline context)
+    # ------------------------------------------------------------------
+    hist_detail_parts = []
+    if not df_raw.empty:
+        if "CSPD" in df_raw.columns:
+            cspd = df_raw["CSPD"].dropna()
+            avg_cspd = float(cspd.mean())
+            max_cspd = float(cspd.max())
+            p95 = float(cspd.quantile(0.95))
+            high_pct = float((cspd > cspd.quantile(0.75)).mean() * 100)
+            hist_detail_parts.append(f"historical current avg {avg_cspd:.3f} m/s, p95={p95:.3f} m/s")
+            if p95 > 0.45:
+                risk_points += 1
+
+        if "PRES" in df_raw.columns:
+            pres_std = float(df_raw["PRES"].dropna().std())
+            hist_detail_parts.append(f"pressure variability std={pres_std:.3f} dbar")
+            if pres_std > 1.5:
+                risk_points += 1
+
+        if "TEMP" in df_raw.columns:
+            temp_range = float(df_raw["TEMP"].dropna().max() - df_raw["TEMP"].dropna().min())
+            hist_detail_parts.append(f"temp range {temp_range:.1f}°C over dataset")
+
+        if hist_detail_parts:
+            details.append("Scripps CCE2 historical — " + ", ".join(hist_detail_parts))
 
     if risk_points >= 4:
         label, score = "high", 2

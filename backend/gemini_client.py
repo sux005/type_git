@@ -68,15 +68,19 @@ Arduino edge sensor (on-device KNN classifier):
 - Water depth: {d1_depth} | Temp: {d1_temp:.1f}°C | Humidity: {d1_humidity:.1f}% | Vibration: {d1_vibration:.3f}g
 - On-device risk: {risk_label.get(d1_risk, d1_risk)}
 
-Scripps ocean dataset (environmental context):
+Live ocean conditions (NDBC buoys near CCE1 & CCE2 moorings):
 - Average current speed: {avg_cspd:.3f} m/s (peak: {max_cspd:.3f} m/s)
-- Historical avg temp: {avg_temp:.2f}°C | Elevated-risk readings: {high_risk_count}
 - Environmental risk: {env_risk_label}
+
+Historical context (Scripps CCE2 mooring dataset):
+- Historical avg ocean temp: {avg_temp:.2f}°C | Elevated-risk readings: {high_risk_count}
 
 Combined system alert: {risk_label.get(combined_risk, combined_risk)}
 
 Write exactly 2 sentences summarizing current coastal flood risk for emergency responders.
-Use specific sensor values. State what the Arduino detected AND what the ocean dataset indicates. Do not use filler phrases."""
+Sentence 1: what the Arduino edge sensor detected right now.
+Sentence 2: what live buoy conditions and historical ocean data indicate about broader risk.
+Use specific values. No filler phrases."""
     try:
         response = client.models.generate_content(
             model="gemini-2.0-flash",

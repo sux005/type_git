@@ -362,7 +362,11 @@ Combined alert: ${data.combined_risk || "unknown"}
 Write exactly 2 sentences summarizing current coastal flood risk. Reference specific sensor values. State what the Arduino detected AND what the ocean dataset indicates. No filler phrases.`;
 
     const summary = await callGemini(prompt);
-    document.getElementById("gemini-summary").textContent = summary || "AI summary unavailable.";
+    if (summary && summary.startsWith("[Gemini error 429")) {
+      document.getElementById("gemini-summary").textContent = "⚠️ Gemini quota reached — data above is current. Retrying in 30s.";
+    } else {
+      document.getElementById("gemini-summary").textContent = summary || "AI summary unavailable.";
+    }
   } catch (e) {
     document.getElementById("gemini-summary").textContent = "AI summary unavailable — retrying...";
   }

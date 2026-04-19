@@ -15,13 +15,16 @@ _RISK_CMD   = {0: "normal", 1: "warning", 2: "critical"}
 
 
 def get_combined_risk() -> int:
-    """Fetch latest events, return the highest alert level across Device 1 and 2."""
     resp = requests.get(API_URL, timeout=5)
     resp.raise_for_status()
 
-    latest = {}  # device_id → alert rank
+    latest = {}
     for raw in resp.json().get("events", []):
         dev_id = raw.get("device_id")
+        try:
+            dev_id = int(dev_id)
+        except (TypeError, ValueError):
+            continue
         if dev_id not in (1, 2):
             continue
         rank = _ALERT_RANK.get(str(raw.get("alert_level", "NORMAL")).upper(), 0)
@@ -34,23 +37,18 @@ def get_combined_risk() -> int:
 def main() -> None:
     print(f"Opening serial port {SERIAL_PORT} at {BAUD_RATE} baud…")
     ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
-    time.sleep(2)
-    print(f"Device 3 actuator bridge running. Polling every {POLL_INTERVAL}s.")
-
-    last_risk = -1
+    print("Waiting for Arduino to boot…")
+    time.sleep(3)
+    print(f"Running. Polling {API_URL} every {POLL_INTERVAL}s.")
 
     try:
         while True:
             try:
                 risk = get_combined_risk()
                 cmd  = _RISK_CMD[risk]
-
-                if risk != last_risk:
-                    print(f"  {_RISK_CMD.get(last_risk, '—')} → {cmd}  (sending to Device 3)")
-                    ser.write((cmd + "\n").encode())
-                    last_risk = risk
-                else:
-                    print(f"  Unchanged: {cmd}")
+                print(f"  Sending: {cmd}")
+                ser.write((cmd + "\n").encode())
+                ser.flush()
 
             except requests.RequestException as e:
                 print(f"  API error: {e}")

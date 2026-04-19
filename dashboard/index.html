@@ -42,32 +42,33 @@
       "
     ></div>
 
-    <script>
-      // These are the color definitions Jeff Sevadjian's code is looking for
-      var cmap = ["#000000", "#333333"];
-      var cmapThermal14 = [
-        "#00004c",
-        "#000080",
-        "#0000b3",
-        "#0000e6",
-        "#2600ff",
-        "#6600ff",
-        "#a600ff",
-        "#e600ff",
-        "#ff00d9",
-        "#ff0099",
-        "#ff0059",
-        "#ff0019",
-        "#ff2600",
-        "#ff6600",
-      ];
+    <h2 style="text-align: center">AI-Generated Summary</h2>
+    <div
+      id="ai-summary"
+      style="
+        width: 100%;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        background: white;
+        padding: 20px;
+        margin-bottom: 30px;
+        font-size: 16px;
+        line-height: 1.6;
+      "
+    >
+      Loading summary...
+    </div>
 
-      // CalCOFI Line coordinates - this prevents errors in map.js
-      var calcofi = [
-        [32.9, -117.3],
-        [34.5, -121.1],
-        [35.1, -123.5],
-      ];
+    <script>
+      // Fetch AI summary from backend
+      fetch('https://3-15-176-0.sslip.io/summary')
+        .then(response => response.json())
+        .then(data => {
+          document.getElementById('ai-summary').innerHTML = data.ai_summary || 'No summary available';
+        })
+        .catch(error => {
+          document.getElementById('ai-summary').innerHTML = 'Error loading summary: ' + error.message;
+        });
     </script>
 
     <script src="/static/jsFuns.js"></script>

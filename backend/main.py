@@ -8,10 +8,6 @@ from pydantic import BaseModel
 import pandas as pd
 import os
 import httpx
-try:
-    from .gemini_client import get_sensor_overview
-except ImportError:
-    from gemini_client import get_sensor_overview  # standalone (EC2) execution
 
 app = FastAPI(title="Coastal Flood Monitoring API")
 
@@ -342,13 +338,6 @@ def get_summary() -> dict:
     d1_humidity = float(dev1["humidity"]) if dev1 and dev1.get("humidity") else 57.0
     d1_vibration = float(dev1["vibration"]) if dev1 and dev1.get("vibration") else 1.0
 
-    if d1_water_depth < 0.3:
-        d1_depth_str = "Shallow"
-    elif d1_water_depth < 0.6:
-        d1_depth_str = "Normal"
-    else:
-        d1_depth_str = "Deep"
-
     raw_alert = dev1["alert_level"] if dev1 else "normal"
     arduino_alert = _adjust_arduino_alert(raw_alert, d1_water_depth, d1_humidity, d1_vibration)
     alert_map = {"normal": 0, "warning": 1, "critical": 2}
@@ -364,23 +353,8 @@ def get_summary() -> dict:
     combined_risk = max(arduino_risk_int, env["score"])
     combined_label = map_risk(combined_risk)
 
-    # --- Call Gemini ---
-    overview = get_sensor_overview(
-        alert_level=combined_label,
-        combined_risk=combined_risk,
-        d1_temp=d1_temp,
-        d1_depth=d1_depth_str,
-        d1_risk=arduino_risk_int,
-        arduino_alert=arduino_alert,
-        d1_humidity=d1_humidity,
-        d1_vibration=d1_vibration,
-        avg_temp=avg_temp,
-        high_risk_count=high_risk_count,
-        env_risk_label=env["label"],
-        avg_cspd=env["avg_cspd"],
-        max_cspd=env["max_cspd"],
-    )
-
+    # Gemini is called browser-side (EC2 IP blocked from free tier).
+    # Return structured data only — browser assembles the AI summary.
     return {
         "csv_conclusion": csv_conclusion,
         "arduino_conclusion": arduino_conclusion,
@@ -388,5 +362,4 @@ def get_summary() -> dict:
         "env_risk_score": env["score"],
         "arduino_alert": arduino_alert,
         "combined_risk": combined_label,
-        "ai_summary": overview,
     }

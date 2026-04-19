@@ -1,20 +1,25 @@
-// Device 1 — Water Sensor Node
-// Reads analog water level, classifies alert, outputs JSON over Serial.
+// Device 1 — Water Sensor Node for Uno Q
+// Reads analog water level, classifies alert, outputs JSON over Monitor.
+
+#include <Arduino_RouterBridge.h>
 
 const int WATER_PIN  = A0;
 const int LED_GREEN  = 9;
 const int LED_YELLOW = 10;
 const int LED_RED    = 11;
 
-// Thresholds — tune after seeing actual sensor range on Serial Monitor
+// Thresholds — tune after seeing actual sensor range
 const int THRESHOLD_WARNING  = 400;
 const int THRESHOLD_CRITICAL = 700;
 
 void setup() {
-  Serial.begin(9600);
+  Monitor.begin(115200);  // Use Monitor for Uno Q App Lab
   pinMode(LED_GREEN,  OUTPUT);
   pinMode(LED_YELLOW, OUTPUT);
   pinMode(LED_RED,    OUTPUT);
+
+  // Boot message
+  Monitor.println("{\"status\":\"booted\"}");
 }
 
 void loop() {
@@ -39,11 +44,11 @@ void loop() {
     digitalWrite(LED_RED,    HIGH);
   }
 
-  Serial.print("{\"device_id\":\"water_node\",\"value\":");
-  Serial.print(normalized, 3);
-  Serial.print(",\"alert_level\":\"");
-  Serial.print(alert);
-  Serial.println("\"}");
+  Monitor.print("{\"device_id\":\"water_node\",\"value\":");
+  Monitor.print(normalized, 3);
+  Monitor.print(",\"alert_level\":\"");
+  Monitor.print(alert);
+  Monitor.println("\"}");
 
   delay(1000);
 }

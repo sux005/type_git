@@ -225,7 +225,7 @@
 <script>
 const EC2 = "https://3-15-176-0.sslip.io";
 const GEMINI_KEY = "AIzaSyBTS_OwHRtXt8CwCez6QZMEP-LZvl1BaXk";
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`;
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`;
 const MAX_POINTS = 30;
 
 function makeChart(id, label, color) {
@@ -334,26 +334,32 @@ async function callGemini(prompt) {
   return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
 }
 
-async function pollSummary() {
+let _geminiLastCalled = 0;
+const GEMINI_INTERVAL = 5 * 60 * 1000; // 5 minutes
+
+async function pollSummary(forceGemini = false) {
   try {
     const res = await fetch(`${EC2}/summary`);
     const data = await res.json();
 
-    // Environmental risk card
+    // Environmental risk card — updates every 30s
     const envEl = document.getElementById("val-env-risk");
     const envRisk = data.env_risk || "normal";
     envEl.textContent = envRisk.charAt(0).toUpperCase() + envRisk.slice(1);
     envEl.style.color = ENV_RISK_COLORS[envRisk] || "#22c55e";
 
-    // Conclusions
+    // Conclusions — update every 30s
     const arduinoText = data.arduino_conclusion || "—";
     const csvText = data.csv_conclusion || "—";
     document.getElementById("arduino-conclusion").textContent = arduinoText;
     document.getElementById("csv-conclusion").textContent = csvText;
 
-    // Call Gemini from the browser
-    document.getElementById("gemini-summary").textContent = "Generating AI summary...";
-    const prompt = `You are a coastal flood monitoring AI for emergency responders.
+    // Gemini — only every 5 min or on manual refresh
+    const now = Date.now();
+    if (forceGemini || (now - _geminiLastCalled) >= GEMINI_INTERVAL) {
+      _geminiLastCalled = now;
+      document.getElementById("gemini-summary").textContent = "Generating AI summary...";
+      const prompt = `You are a coastal flood monitoring AI for emergency responders.
 
 Arduino edge sensor (on-device KNN): ${arduinoText}
 Scripps ocean dataset: ${csvText}
@@ -361,11 +367,12 @@ Combined alert: ${data.combined_risk || "unknown"}
 
 Write exactly 2 sentences summarizing current coastal flood risk. Reference specific sensor values. State what the Arduino detected AND what the ocean dataset indicates. No filler phrases.`;
 
-    const summary = await callGemini(prompt);
-    if (summary && summary.startsWith("[Gemini error 429")) {
-      document.getElementById("gemini-summary").textContent = "⚠️ Gemini quota reached — data above is current. Retrying in 30s.";
-    } else {
-      document.getElementById("gemini-summary").textContent = summary || "AI summary unavailable.";
+      const summary = await callGemini(prompt);
+      if (summary && summary.startsWith("[Gemini error 429")) {
+        document.getElementById("gemini-summary").textContent = "⚠️ Gemini quota reached — data above is current.";
+      } else {
+        document.getElementById("gemini-summary").textContent = summary || "AI summary unavailable.";
+      }
     }
   } catch (e) {
     document.getElementById("gemini-summary").textContent = "AI summary unavailable — retrying...";
@@ -376,13 +383,13 @@ async function refreshSummary() {
   const btn = document.getElementById("refresh-btn");
   btn.textContent = "↻ Loading...";
   btn.disabled = true;
-  await pollSummary();
+  await pollSummary(true);
   btn.textContent = "↻ Refresh";
   btn.disabled = false;
 }
 
-pollSummary();
-setInterval(pollSummary, 30000);
+pollSummary(true);
+setInterval(() => pollSummary(false), 30000);
 </script>
 </body>
 </html>

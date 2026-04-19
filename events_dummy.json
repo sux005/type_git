@@ -1,0 +1,12 @@
+[
+    {
+      "device_id": "device_1",
+      "alert_level": "normal",
+      "timestamp": "2026-01-01T10:00:00"
+    },
+    {
+      "device_id": "device_2",
+      "alert_level": "critical",
+      "timestamp": "2026-01-01T10:01:00"
+    }
+  ]

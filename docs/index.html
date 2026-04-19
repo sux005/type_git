@@ -179,7 +179,13 @@
 </div>
 
 <div class="summary-section">
-  <h2>AI Overview · Gemini 2.0 Flash</h2>
+  <h2 style="display:flex;align-items:center;justify-content:space-between;">
+    <span>AI Overview · Gemini 2.5 Flash</span>
+    <button id="refresh-btn" onclick="refreshSummary()" style="
+      background:#1f2d4a;border:1px solid #2d3f5c;color:#a0b4d0;
+      padding:5px 14px;border-radius:6px;font-size:0.75rem;cursor:pointer;
+      letter-spacing:0.04em;text-transform:uppercase;">↻ Refresh</button>
+  </h2>
   <div class="ai-box">
     <div class="conclusions">
       <div class="conclusion-item">
@@ -360,6 +366,15 @@ Write exactly 2 sentences summarizing current coastal flood risk. Reference spec
   } catch (e) {
     document.getElementById("gemini-summary").textContent = "AI summary unavailable — retrying...";
   }
+}
+
+async function refreshSummary() {
+  const btn = document.getElementById("refresh-btn");
+  btn.textContent = "↻ Loading...";
+  btn.disabled = true;
+  await pollSummary();
+  btn.textContent = "↻ Refresh";
+  btn.disabled = false;
 }
 
 pollSummary();

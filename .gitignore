@@ -4,3 +4,11 @@
 # Environment variables
 .env
 backend/.env
+
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store

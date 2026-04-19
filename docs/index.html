@@ -224,8 +224,6 @@
 
 <script>
 const EC2 = "https://3-15-176-0.sslip.io";
-const GEMINI_KEY = "AIzaSyDmBYi49zhV" + "RNsXuHJ__Cs58OFvZ1PGhr0";
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${GEMINI_KEY}`;
 const MAX_POINTS = 30;
 
 function makeChart(id, label, color) {
@@ -320,59 +318,25 @@ setInterval(poll, 1000);
 
 const ENV_RISK_COLORS = { normal: "#22c55e", elevated: "#f59e0b", high: "#ef4444" };
 
-async function callGemini(prompt) {
-  const res = await fetch(GEMINI_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-  });
-  const data = await res.json();
-  if (!res.ok) {
-    const msg = data.error?.message || JSON.stringify(data);
-    return `[Gemini error ${res.status}: ${msg.slice(0, 120)}]`;
-  }
-  return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
-}
-
-let _geminiLastCalled = 0;
-const GEMINI_INTERVAL = 5 * 60 * 1000; // 5 minutes
-
-async function pollSummary(forceGemini = false) {
+async function pollSummary(force = false) {
   try {
-    const res = await fetch(`${EC2}/summary`);
+    const url = force ? `${EC2}/summary?force=true` : `${EC2}/summary`;
+    const res = await fetch(url);
     const data = await res.json();
 
-    // Environmental risk card — updates every 30s
     const envEl = document.getElementById("val-env-risk");
     const envRisk = data.env_risk || "normal";
     envEl.textContent = envRisk.charAt(0).toUpperCase() + envRisk.slice(1);
     envEl.style.color = ENV_RISK_COLORS[envRisk] || "#22c55e";
 
-    // Conclusions — update every 30s
-    const arduinoText = data.arduino_conclusion || "—";
-    const csvText = data.csv_conclusion || "—";
-    document.getElementById("arduino-conclusion").textContent = arduinoText;
-    document.getElementById("csv-conclusion").textContent = csvText;
+    document.getElementById("arduino-conclusion").textContent = data.arduino_conclusion || "—";
+    document.getElementById("csv-conclusion").textContent = data.csv_conclusion || "—";
 
-    // Gemini — only every 5 min or on manual refresh
-    const now = Date.now();
-    if (forceGemini || (now - _geminiLastCalled) >= GEMINI_INTERVAL) {
-      _geminiLastCalled = now;
-      document.getElementById("gemini-summary").textContent = "Generating AI summary...";
-      const prompt = `You are a coastal flood monitoring AI for emergency responders.
-
-Arduino edge sensor (on-device KNN): ${arduinoText}
-Scripps ocean dataset: ${csvText}
-Combined alert: ${data.combined_risk || "unknown"}
-
-Write exactly 2 sentences summarizing current coastal flood risk. Reference specific sensor values. State what the Arduino detected AND what the ocean dataset indicates. No filler phrases.`;
-
-      const summary = await callGemini(prompt);
-      if (summary && summary.startsWith("[Gemini error 429")) {
-        document.getElementById("gemini-summary").textContent = "⚠️ Gemini quota reached — data above is current.";
-      } else {
-        document.getElementById("gemini-summary").textContent = summary || "AI summary unavailable.";
-      }
+    const summary = data.gemini_summary || "";
+    if (summary.startsWith("[Gemini error 429")) {
+      document.getElementById("gemini-summary").textContent = "⚠️ Gemini quota reached — data above is current.";
+    } else {
+      document.getElementById("gemini-summary").textContent = summary || "AI summary unavailable.";
     }
   } catch (e) {
     document.getElementById("gemini-summary").textContent = "AI summary unavailable — retrying...";

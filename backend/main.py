@@ -2,12 +2,38 @@ from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 import time
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pandas as pd
 import os
 import httpx
+
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+_GEMINI_MODEL = "gemini-2.0-flash-lite"
+_gemini_cache: dict = {"summary": None, "fetched_at": 0.0}
+_GEMINI_TTL = 300  # 5 minutes
+
+
+def _call_gemini(prompt: str) -> str:
+    if not GEMINI_API_KEY:
+        return ""
+    url = (
+        f"https://generativelanguage.googleapis.com/v1beta/models/"
+        f"{_GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
+    )
+    try:
+        resp = httpx.post(
+            url,
+            json={"contents": [{"parts": [{"text": prompt}]}]},
+            timeout=15,
+        )
+        data = resp.json()
+        if not resp.is_success:
+            return f"[Gemini error {resp.status_code}: {data.get('error', {}).get('message', '')[:80]}]"
+        return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+    except Exception as e:
+        return f"[Gemini unavailable: {str(e)[:60]}]"
 
 app = FastAPI(title="Coastal Flood Monitoring API")
 
@@ -318,7 +344,7 @@ def _adjust_arduino_alert(alert: str, water_depth: float, humidity: float, vibra
 
 
 @app.get("/summary")
-def get_summary() -> dict:
+def get_summary(force: bool = Query(False)) -> dict:
     """Get AI-generated summary combining Arduino and CSV environmental data."""
     # --- CSV environmental conclusions ---
     avg_temp = float(df["TEMP"].mean())
@@ -353,8 +379,21 @@ def get_summary() -> dict:
     combined_risk = max(arduino_risk_int, env["score"])
     combined_label = map_risk(combined_risk)
 
-    # Gemini is called browser-side (EC2 IP blocked from free tier).
-    # Return structured data only — browser assembles the AI summary.
+    # --- Gemini summary (server-side cached, 5 min TTL) ---
+    now = time.time()
+    if force or _gemini_cache["summary"] is None or (now - _gemini_cache["fetched_at"]) >= _GEMINI_TTL:
+        prompt = (
+            f"You are a coastal flood monitoring AI for emergency responders.\n\n"
+            f"Arduino edge sensor (on-device KNN): {arduino_conclusion}\n"
+            f"Scripps ocean dataset: {csv_conclusion}\n"
+            f"Combined alert: {combined_label}\n\n"
+            f"Write exactly 2 sentences summarizing current coastal flood risk. "
+            f"Reference specific sensor values. State what the Arduino detected AND what the ocean dataset indicates. "
+            f"No filler phrases."
+        )
+        _gemini_cache["summary"] = _call_gemini(prompt)
+        _gemini_cache["fetched_at"] = now
+
     return {
         "csv_conclusion": csv_conclusion,
         "arduino_conclusion": arduino_conclusion,
@@ -362,4 +401,5 @@ def get_summary() -> dict:
         "env_risk_score": env["score"],
         "arduino_alert": arduino_alert,
         "combined_risk": combined_label,
+        "gemini_summary": _gemini_cache["summary"] or "",
     }
